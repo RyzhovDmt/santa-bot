@@ -1,0 +1,28 @@
+name = "santa-bot"
+main = "src/worker.js"
+compatibility_date = "2026-06-01"
+
+[vars]
+BOT_USERNAME = "NaibAlgoev2_bot"
+BOT_NAME = "NaibAlgoev"
+# Time zone for dates and reminders
+BOT_TIMEZONE = "Europe/Moscow"
+# Reminders are sent once a day, on the first hourly run from this hour
+REMINDER_HOUR = "11"
+# Optional: worker URL, e.g. "https://santa-bot.<subdomain>.workers.dev".
+# When set, the hourly cron registers the webhook itself if it's missing.
+PUBLIC_URL = "https://santa-bot.santa-bot.workers.dev"
+
+# Secrets (not in this file): npx wrangler secret put BOT_TOKEN / WEBHOOK_SECRET
+
+[[d1_databases]]
+binding = "DB"
+database_name = "santa-bot"
+database_id = "d63faca5-b37d-4c97-93e4-618fbdbe0975"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[observability]
+enabled = true

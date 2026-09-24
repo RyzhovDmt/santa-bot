@@ -1,0 +1,19 @@
+{
+  "name": "santa-bot",
+  "version": "1.0.0",
+  "description": "Telegram Secret Santa bot on Cloudflare Workers",
+  "type": "module",
+  "main": "src/worker.js",
+  "scripts": {
+    "test": "node --test --no-warnings",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply santa-bot --remote",
+    "logs": "wrangler tail"
+  },
+  "dependencies": {
+    "grammy": "^1.46.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.139.0"
+  }
+}
