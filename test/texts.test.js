@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  MAX_PHRASE_LENGTH, PHRASES, phraseLabel, pickPhrase, placeholdersIn, renderPhrase, stageKey, validatePhrase,
+  MAX_PHRASE_LENGTH, PHRASES, phraseLabel, pickPhrase, placeholdersIn, renderPhrase, stageKey, validatePhrase, withCatchphrase,
 } from '../src/texts.js';
 
 test('placeholdersIn finds closed placeholders only', () => {
@@ -17,11 +17,12 @@ test('validatePhrase checks placeholders allowed for the notification', () => {
   assert.equal(validatePhrase('gift2', 'Купи подарок для {receiver} до {date}'), null);
   assert.match(validatePhrase('join', 'Тебе дарит {santa}'), /нельзя использовать: \{santa\}/);
   assert.match(validatePhrase('wish2', ''), /пустая/);
-  assert.match(validatePhrase('wish2', 'x'.repeat(MAX_PHRASE_LENGTH + 1)), /длинная/);
+  assert.match(validatePhrase('wish2', 'x'.repeat(MAX_PHRASE_LENGTH + 1)), /Слишком длинно/);
 });
 
 test('default phrases use only their own placeholders', () => {
   for (const [key, phrase] of Object.entries(PHRASES)) {
+    if (phrase.flavor) continue;
     assert.ok(phrase.defaults.length >= 3, `${key}: at least 3 defaults`);
     for (const text of phrase.defaults) assert.equal(validatePhrase(key, text), null, `${key}: ${text}`);
   }
@@ -51,4 +52,27 @@ test('stage labels are derived from stage starts', () => {
   assert.equal(phraseLabel('gift2'), '🛍 Подарок: 2-е напоминание');
   assert.equal(phraseLabel('lastDay'), '🔥 Пожелание: последний день');
   assert.equal(phraseLabel('draw'), '🎲 Жеребьёвка');
+});
+
+test('flavor words are prepended at random, with the bot own punctuation', () => {
+  const game = {
+    phrases: {
+      interjections: [{ id: 1, text: 'ну чё!', by: '1' }],
+      addresses: [{ id: 2, text: 'братан', by: '1' }],
+    },
+  };
+  const always = () => 0;
+  const never = () => 0.99;
+  assert.equal(pickPhrase(game, 'draw', { name: 'Аня', title: 'Офис', receiver: 'Вика' }, always), 'Ну чё, братан! 🎅 Жеребьёвка в игре «Офис» проведена!');
+  assert.equal(pickPhrase(game, 'draw', { name: 'Аня', title: 'Офис', receiver: 'Вика' }, never), '🦌 Олени доставили тебе имя получателя!');
+  assert.equal(pickPhrase({}, 'draw', { title: 'Офис' }, always), '🎅 Жеребьёвка в игре «Офис» проведена!');
+  assert.match(validatePhrase('addresses', 'x'.repeat(41)), /максимум 40/);
+  assert.match(validatePhrase('addresses', 'эй {name}'), /нельзя использовать/);
+});
+
+test('catchphrase is appended at the end sometimes', () => {
+  const game = { phrases: { catchphrases: [{ id: 1, text: 'Ну это база', by: '1' }] } };
+  assert.equal(withCatchphrase(game, 'Текст', () => 0), 'Текст\n\n💬 Ну это база');
+  assert.equal(withCatchphrase(game, 'Текст', () => 0.99), 'Текст');
+  assert.equal(withCatchphrase({}, 'Текст', () => 0), 'Текст');
 });

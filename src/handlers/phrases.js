@@ -19,7 +19,7 @@ function menuView(game) {
       rows.push([button(`${phraseLabel(key)} (${phraseCount(game, key)})`, 'phr.key', game.code, key)]);
     } else if (!shownGroups.has(p.menuGroup)) {
       shownGroups.add(p.menuGroup);
-      rows.push([button(`${PHRASE_GROUPS[p.menuGroup]} ▸`, 'phr.group', game.code, p.menuGroup)]);
+      rows.push([button(`${PHRASE_GROUPS[p.menuGroup].label} ▸`, 'phr.group', game.code, p.menuGroup)]);
     }
   }
   return {
@@ -32,7 +32,7 @@ function groupView(game, group) {
   const rows = keysOf(group).map((key) => [button(`${phraseLabel(key)} (${phraseCount(game, key)})`, 'phr.key', game.code, key)]);
   rows.push([button('← Все уведомления', 'phr.menu', game.code, 'edit')]);
   return {
-    text: `${PHRASE_GROUPS[group]}\n\nЧем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:`,
+    text: `${PHRASE_GROUPS[group].label}\n\n${PHRASE_GROUPS[group].hint}`,
     keyboard: inline(rows),
   };
 }
@@ -43,14 +43,12 @@ function keyView(game, key, userId) {
   const lines = [
     `${phraseLabel(key)} — ${phrase.hint}`,
     '',
-    'Стандартные:',
-    ...phrase.defaults.map((text) => `• ${text}`),
-    '',
+    ...(phrase.defaults.length ? ['Стандартные:', ...phrase.defaults.map((text) => `• ${text}`), ''] : []),
     'Добавленные в игре:',
     ...(custom.length ? custom.map((p, i) => `${i + 1}. ${p.text}`) : ['пока нет']),
-    '',
-    'Подстановки:',
-    ...phrase.placeholders.map((p) => `{${p}} — ${PLACEHOLDER_HELP[p]}`),
+    ...(phrase.placeholders.length
+      ? ['', 'Подстановки:', ...phrase.placeholders.map((p) => `{${p}} — ${PLACEHOLDER_HELP[p]}`)]
+      : []),
   ];
 
   const rows = [];
@@ -61,7 +59,7 @@ function keyView(game, key, userId) {
   }
   const group = phrase.menuGroup;
   rows.push([group
-    ? button(`← ${PHRASE_GROUPS[group]}`, 'phr.group', game.code, group)
+    ? button(`← ${PHRASE_GROUPS[group].label}`, 'phr.group', game.code, group)
     : button('← Все уведомления', 'phr.menu', game.code, 'edit')]);
   return { text: lines.join('\n'), keyboard: inline(rows) };
 }
@@ -73,8 +71,12 @@ async function askPhrase(app, ctx, game, userId, key) {
   if (customPhrases(game, key).length >= MAX_CUSTOM_PHRASES) return ctx.reply(`Уже ${MAX_CUSTOM_PHRASES} фраз — это максимум. Удали какую-нибудь, чтобы добавить новую.`);
   app.store.setMode(userId, { type: 'phrase', code: game.code, key });
   await app.store.save();
-  const help = PHRASES[key].placeholders.map((p) => `{${p}} — ${PLACEHOLDER_HELP[p]}`).join('\n');
-  return ctx.reply(`Напиши фразу для «${phraseLabel(key)}».\n\nМожно использовать подстановки:\n${help}\n\nНапример: ${PHRASES[key].defaults[1]}`, cancelKeyboard(game.code));
+  const phrase = PHRASES[key];
+  const help = phrase.placeholders.length
+    ? `\n\nМожно использовать подстановки:\n${phrase.placeholders.map((p) => `{${p}} — ${PLACEHOLDER_HELP[p]}`).join('\n')}`
+    : '';
+  const example = phrase.example ?? phrase.defaults[1] ?? phrase.defaults[0];
+  return ctx.reply(`Напиши ${phrase.flavor ? 'слово или короткую фразу' : 'фразу'} для «${phraseLabel(key)}».${help}\n\nНапример: ${example}`, cancelKeyboard(game.code));
 }
 
 async function addPhrase(app, ctx, game, mode) {

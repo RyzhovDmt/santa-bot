@@ -94,9 +94,16 @@ function stageEntries(group, label, hint, placeholders, stagePhrases) {
 }
 
 export const PHRASE_GROUPS = {
-  wish: '✍️ Напоминания о пожелании',
-  gift: '🛍 Напоминания о подарке',
+  wish: { label: '✍️ Напоминания о пожелании', hint: 'Чем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:' },
+  gift: { label: '🛍 Напоминания о подарке', hint: 'Чем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:' },
+  flavor: { label: '🗣 Обращения, междометия, фразочки', hint: 'Бот случайно добавляет их в любое уведомление: обращение и междометие — в начало («Ну чё, братан! …»), фразочку — в конец. Пока списки пустые — ничего не добавляется.' },
 };
+
+// Flavor lists: short words prepended to notifications and catchphrases appended, at random.
+const FLAVOR_MAX_LENGTH = { interjections: 40, addresses: 40, catchphrases: 150 };
+const INTERJECTION_CHANCE = 0.5;
+const ADDRESS_CHANCE = 0.6;
+const CATCHPHRASE_CHANCE = 0.35;
 
 export const PHRASES = {
   join: {
@@ -135,6 +142,33 @@ export const PHRASES = {
   },
   ...stageEntries('gift', '🛍 Подарок', 'раз в 5 дней до вручения, если подарок не куплен',
     ['name', 'title', 'days', 'date', 'receiver', 'count'], GIFT_STAGES),
+  interjections: {
+    label: '💥 Междометия',
+    hint: 'в начале уведомления, примерно в половине случаев',
+    menuGroup: 'flavor',
+    flavor: true,
+    example: 'Ну чё',
+    placeholders: [],
+    defaults: [],
+  },
+  addresses: {
+    label: '🗣 Обращения',
+    hint: 'в начале уведомления, в большинстве случаев',
+    menuGroup: 'flavor',
+    flavor: true,
+    example: 'братан',
+    placeholders: [],
+    defaults: [],
+  },
+  catchphrases: {
+    label: '💬 Фразочки',
+    hint: 'коронные фразы — в конце уведомления, примерно в трети случаев',
+    menuGroup: 'flavor',
+    flavor: true,
+    example: 'Ну это база',
+    placeholders: [],
+    defaults: [],
+  },
   reveal: {
     label: '🎉 Раскрытие Сант',
     hint: 'когда организатор раскрывает, кто кому дарил',
@@ -182,7 +216,8 @@ export function renderPhrase(template, vars) {
 // Returns an error message or null.
 export function validatePhrase(key, text) {
   if (!text) return 'Фраза пустая.';
-  if (text.length > MAX_PHRASE_LENGTH) return `Слишком длинная фраза: максимум ${MAX_PHRASE_LENGTH} символов.`;
+  const maxLength = PHRASES[key].flavor ? FLAVOR_MAX_LENGTH[key] : MAX_PHRASE_LENGTH;
+  if (text.length > maxLength) return `Слишком длинно: максимум ${maxLength} символов.`;
   const allowed = PHRASES[key].placeholders;
   const unknown = placeholdersIn(text).filter((p) => !allowed.includes(p));
   if (unknown.length) {
@@ -201,9 +236,37 @@ export function stageKey(group, number) {
   return stages[0]?.[0];
 }
 
+// "ёпта!" -> "ёпта": flavor words are joined with the bot's own punctuation.
+function trimPunctuation(text) {
+  let end = text.length;
+  while (end > 0 && '!?.,;:… '.includes(text[end - 1])) end--;
+  return text.slice(0, end);
+}
+
+function pickFlavor(game, key, chance, random) {
+  const list = customPhrases(game, key);
+  if (!list.length || random() >= chance) return '';
+  return list[Math.floor(random() * list.length)].text;
+}
+
+// Prepends a random interjection and/or address from the game's flavor lists: "Ну чё, братан! <text>".
+function decorate(game, text, random) {
+  const head = [
+    trimPunctuation(pickFlavor(game, 'interjections', INTERJECTION_CHANCE, random)),
+    trimPunctuation(pickFlavor(game, 'addresses', ADDRESS_CHANCE, random)),
+  ].filter(Boolean).join(', ');
+  return head ? `${head[0].toUpperCase()}${head.slice(1)}! ${text}` : text;
+}
+
 export function pickPhrase(game, key, vars, random = Math.random) {
   const pool = [...PHRASES[key].defaults, ...customPhrases(game, key).map((p) => p.text)];
-  return renderPhrase(pool[Math.floor(random() * pool.length)], vars);
+  return decorate(game, renderPhrase(pool[Math.floor(random() * pool.length)], vars), random);
+}
+
+// Appends a random catchphrase to a whole notification (sometimes, if the game has any).
+export function withCatchphrase(game, text, random = Math.random) {
+  const phrase = pickFlavor(game, 'catchphrases', CATCHPHRASE_CHANCE, random);
+  return phrase ? `${text}\n\n💬 ${phrase}` : text;
 }
 
 // Name without "(@username)" reads better inside a sentence.

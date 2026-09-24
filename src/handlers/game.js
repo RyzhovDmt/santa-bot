@@ -3,7 +3,7 @@ import { cycles, draw, santaOf } from '../draw.js';
 import {
   BTN, HELP, STATUS_TITLE, button, cancelKeyboard, displayName, gameDetails, giftDetails, inline, mainMenu,
 } from '../ui.js';
-import { pickPhrase, shortName } from '../texts.js';
+import { pickPhrase, shortName, withCatchphrase } from '../texts.js';
 
 const MIN_PLAYERS = 3;
 // Draw sends one message per player; the free plan allows 50 subrequests per invocation.
@@ -143,7 +143,7 @@ async function joinGame(app, ctx, code) {
   await store.save();
   const greeting = pickPhrase(game, 'join', { name: shortName(participant), title: game.title });
   return ctx.reply(
-    `${greeting}\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`,
+    withCatchphrase(game, `${greeting}\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`),
     mainMenu(game),
   );
 }
@@ -233,7 +233,7 @@ async function applySetting(app, ctx, game, userId, field, raw) {
 function drawMessage(game, giverId, receiverId) {
   const receiver = game.participants[receiverId];
   const details = giftDetails(game);
-  return [
+  return withCatchphrase(game, [
     pickPhrase(game, 'draw', { name: shortName(game.participants[giverId]), title: game.title, receiver: receiver.name }),
     '',
     `Игра «${game.title}»`,
@@ -245,7 +245,7 @@ function drawMessage(game, giverId, receiverId) {
     '',
     `Спросить что-то у получателя анонимно: «${BTN.whom}» → «✉️ Написать получателю».`,
     'Никому не говори — это секрет 🤫',
-  ].join('\n');
+  ].join('\n'));
 }
 
 async function runDraw(app, ctx, game) {
@@ -300,13 +300,13 @@ async function reveal(app, ctx, game) {
   const chains = cycles(game.pairs).map((cycle) => [...cycle, cycle[0]].map(name).join(' → ')).join('\n\n');
   await app.broadcast(Object.keys(game.participants).map((to) => ({
     to,
-    text: [
+    text: withCatchphrase(game, [
       pickPhrase(game, 'reveal', { name: shortName(game.participants[to]), title: game.title, santa: name(santaOf(game.pairs, to)) }),
       '',
       `Тебе дарит: ${name(santaOf(game.pairs, to))}`,
       '',
       `Кто кому дарит:\n${chains}`,
-    ].join('\n'),
+    ].join('\n')),
     extra: mainMenu(game),
   })));
 }
