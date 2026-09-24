@@ -300,7 +300,7 @@ export function validatePhrase(key, text) {
   }
   const oblique = nameAfterPreposition(text);
   if (oblique) {
-    return `Имя подставляется как есть, без склонения: «${oblique}» превратится в «для Ирина». Перестрой фразу, чтобы имя было в начале или после тире, например: «{receiver} ждёт подарок».`;
+    return `Имя подставляется как есть, без склонения: «${oblique}» превратится в «${oblique.split(' ')[0]} Ирина». Перестрой фразу, чтобы имя было в начале или после тире, например: «{receiver} ждёт подарок».`;
   }
   return null;
 }
