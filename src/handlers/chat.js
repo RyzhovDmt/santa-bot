@@ -1,4 +1,5 @@
 import { santaOf } from '../draw.js';
+import { flavored } from '../texts.js';
 import { BTN, button, cancelKeyboard, inline, mainMenu } from '../ui.js';
 
 // Voice, video notes, contacts and locations can give the sender away, so they are not relayed.
@@ -48,7 +49,7 @@ async function relay(app, ctx, game, mode) {
 
   app.store.setMode(userId, null);
   await app.store.save();
-  return ctx.reply('Отправлено ✅', mainMenu(game));
+  return ctx.reply(flavored(game, 'sent', game.participants[userId], 'Отправлено ✅'), mainMenu(game));
 }
 
 export function register(app) {

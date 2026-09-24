@@ -1,4 +1,5 @@
 import { santaOf } from '../draw.js';
+import { flavored } from '../texts.js';
 import { BTN, button, cancelKeyboard, giftDetails, inline, mainMenu } from '../ui.js';
 
 // Keeps the draw message (wish + details) under Telegram's 4096 chars limit.
@@ -86,12 +87,12 @@ export async function saveWish(app, ctx, game, userId, rawText, how) {
     const header = adding
       ? `➕ Пожелание твоего получателя (${p.name}) дополнено:\n\n${text}\n\nЦеликом:\n${wish}`
       : `✏️ Пожелание твоего получателя (${p.name}) изменилось:\n\n${wish}`;
-    const sent = santaId && await app.notify(santaId, header);
+    const sent = santaId && await app.notify(santaId, flavored(game, 'santaUpdate', game.participants[santaId], header, { receiver: p.name }));
     suffix = sent ? ' Твой Санта получил обновление.' : '';
   }
 
   const view = wishView(game, userId);
-  return ctx.reply(`Пожелание сохранено ✅${suffix}\n\n${view.text}`, view.keyboard);
+  return ctx.reply(flavored(game, 'wishSaved', p, `Пожелание сохранено ✅${suffix}\n\n${view.text}`), view.keyboard);
 }
 
 async function setFlag(app, ctx, game, userId, flag, value, view) {
@@ -100,7 +101,10 @@ async function setFlag(app, ctx, game, userId, flag, value, view) {
   if (flag === 'giftBought' && game.status === 'open') return ctx.reply('Жеребьёвка ещё не проведена.');
   p[flag] = value;
   await app.store.save();
-  return render(ctx, view(game, userId), true);
+  await render(ctx, view(game, userId), true);
+  if (flag === 'giftBought' && value) {
+    return ctx.reply(flavored(game, 'giftBought', p, 'Отметил: подарок куплен 🛍', { receiver: game.participants[game.pairs[userId]].name }));
+  }
 }
 
 export function register(app) {

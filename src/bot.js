@@ -5,6 +5,7 @@ import * as game from './handlers/game.js';
 import * as phrases from './handlers/phrases.js';
 import * as wish from './handlers/wish.js';
 import { Store } from './storage.js';
+import { flavored } from './texts.js';
 import { BTN, BUTTON_LABELS, HELP, mainMenu } from './ui.js';
 
 const SEND_DELAY_MS = 35; // stay well below Telegram's ~30 msg/s limit
@@ -170,7 +171,7 @@ export function createApp(env, { apiTransformer } = {}) {
     if (!current) return ctx.reply(`Ты пока не в игре. Попроси у организатора ссылку-приглашение или создай свою: «${BTN.create}».`, mainMenu());
     const hints = [`«${BTN.wish}» — изменить или дополнить пожелание`];
     if (current.status !== 'open') hints.push(`«${BTN.whom}» — получатель и переписка с ним`, `«${BTN.toSanta}» — написать своему Санте`);
-    return ctx.reply(`Пользуйся кнопками внизу 👇\n\n${hints.join('\n')}`, mainMenu(current));
+    return ctx.reply(flavored(current, 'idle', current.participants[userId], `Пользуйся кнопками внизу 👇\n\n${hints.join('\n')}`), mainMenu(current));
   });
 
   bot.catch(async (err) => {

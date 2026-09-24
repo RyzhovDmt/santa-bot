@@ -4,7 +4,7 @@ import {
   BTN, HELP, STATUS_TITLE, button, cancelKeyboard, displayName, gameDetails, giftDetails, inline, mainMenu,
 } from '../ui.js';
 import {
-  isSoft, pickPhrase, shortName, toneFor, withCatchphrase,
+  flavored, isSoft, pickPhrase, shortName, toneFor, withCatchphrase,
 } from '../texts.js';
 
 const MIN_PLAYERS = 3;
@@ -70,12 +70,14 @@ function ownGame(app, ctx, fn) {
   const userId = app.userId(ctx);
   const game = app.store.currentGame(userId);
   if (!game) return notInGame(ctx);
-  if (game.ownerId !== userId) return ctx.reply('Это может сделать только организатор игры.');
+  if (game.ownerId !== userId) return ctx.reply(denied(game, userId));
   return fn(game, userId);
 }
 
+const denied = (game, userId) => flavored(game, 'denied', game.participants[userId], 'Это может сделать только организатор игры.');
+
 const ownerOnly = (handler) => (ctx, game, userId) =>
-  game.ownerId === userId ? handler(ctx, game, userId) : ctx.reply('Это может сделать только организатор игры.');
+  game.ownerId === userId ? handler(ctx, game, userId) : ctx.reply(denied(game, userId));
 
 async function createGame(app, ctx, rawTitle) {
   const { store } = app;
@@ -229,7 +231,7 @@ async function applySetting(app, ctx, game, userId, field, raw) {
   const others = Object.keys(game.participants).filter((id) => id !== userId);
   await app.broadcast(others.map((to) => ({
     to,
-    text: `ℹ️ Организатор обновил игру «${game.title}»:\n${setting.label}: ${shown}`,
+    text: flavored(game, 'settingsUpdate', game.participants[to], `ℹ️ Организатор обновил игру «${game.title}»:\n${setting.label}: ${shown}`),
   })));
   return ctx.reply(`Сохранено ✅\n\n${gameDetails(game)}`, infoKeyboard(game, userId));
 }
@@ -371,7 +373,7 @@ export function register(app) {
   }));
   app.onAction('soft.toggle', (ctx, game, userId, participantId) => (game.ownerId === userId
     ? toggleSoft(app, ctx, game, participantId)
-    : ctx.reply('Это может сделать только организатор игры.')));
+    : ctx.reply(denied(game, userId))));
 
   bot.command('start', (ctx) => {
     const code = ctx.match.trim().toUpperCase();
@@ -423,7 +425,7 @@ export const inputs = {
   newGame: (app, ctx) => (ctx.message.text ? createGame(app, ctx, ctx.message.text) : ctx.reply('Напиши название текстом.')),
   setting: (app, ctx, game, mode) => {
     const userId = app.userId(ctx);
-    if (game.ownerId !== userId) return ctx.reply('Это может сделать только организатор игры.');
+    if (game.ownerId !== userId) return ctx.reply(denied(game, userId));
     if (!ctx.message.text) return ctx.reply('Пришли значение текстом.');
     return applySetting(app, ctx, game, userId, mode.field, ctx.message.text);
   },

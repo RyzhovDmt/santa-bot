@@ -100,14 +100,15 @@ function stageEntries(group, label, hint, placeholders, stagePhrases) {
 export const PHRASE_GROUPS = {
   wish: { label: '✍️ Напоминания о пожелании', hint: 'Чем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:' },
   gift: { label: '🛍 Напоминания о подарке', hint: 'Чем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:' },
+  replies: { label: '📌 Ответы бота', hint: 'Бот отвечает этими фразами на действия участников: сохранил пожелание, купил подарок, отправил сообщение, написал что-то непонятное…' },
   flavor: { label: '🗣 Обращения, междометия, фразочки', hint: 'Бот случайно добавляет их в любое уведомление: обращение и междометие — в начало («Ну чё, братан! …»), фразочку — в конец. Пока списки пустые — ничего не добавляется.' },
 };
 
 // Flavor lists: short words prepended to notifications and catchphrases appended, at random.
 const FLAVOR_MAX_LENGTH = { interjections: 40, addresses: 40, catchphrases: 150 };
-const INTERJECTION_CHANCE = 0.5;
-const ADDRESS_CHANCE = 0.6;
-const CATCHPHRASE_CHANCE = 0.35;
+const INTERJECTION_CHANCE = 0.6;
+const ADDRESS_CHANCE = 0.75;
+const CATCHPHRASE_CHANCE = 0.5;
 
 export const PHRASES = {
   join: {
@@ -146,6 +147,55 @@ export const PHRASES = {
   },
   ...stageEntries('gift', '🛍 Подарок', 'раз в 5 дней до вручения, если подарок не куплен',
     ['name', 'title', 'days', 'date', 'receiver', 'count'], GIFT_STAGES),
+  wishSaved: {
+    label: '✅ Пожелание сохранено',
+    hint: 'ответ, когда участник записал или дополнил пожелание',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title'],
+    defaults: ['📝 Записал!', '✅ Санта в курсе.', '🎁 Отличное пожелание, {name}!'],
+  },
+  giftBought: {
+    label: '🛍 Подарок куплен',
+    hint: 'ответ, когда участник отметил, что купил подарок',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title', 'receiver'],
+    defaults: ['🛍 Красота! Подарок куплен.', '🎉 {name}, вот это по-сантовски!', '✅ Отметил: подарок есть.'],
+  },
+  sent: {
+    label: '📨 Сообщение отправлено',
+    hint: 'ответ после анонимного сообщения Санте или получателю',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title'],
+    defaults: ['📨 Доставлено.', '🤫 Отправил анонимно.', '🦌 Олени унесли твоё сообщение.'],
+  },
+  santaUpdate: {
+    label: '✏️ Санте: пожелание изменилось',
+    hint: 'Санта получает, когда его получатель меняет пожелание',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title', 'receiver'],
+    defaults: ['✏️ Новости от получателя!', '📬 Получатель кое-что поменял в пожелании.', '👀 Обнови планы, Санта.'],
+  },
+  settingsUpdate: {
+    label: '📣 Изменились настройки игры',
+    hint: 'всем участникам, когда организатор меняет бюджет или даты',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title'],
+    defaults: ['📣 Внимание, изменения!', 'ℹ️ Организатор что-то поменял.', '🔧 Обновление правил игры.'],
+  },
+  idle: {
+    label: '🤔 Бот не понял',
+    hint: 'ответ на сообщение, которое бот не ждал',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title'],
+    defaults: ['🤔 Не понял, но звучит интересно.', '👇 Кнопки внизу, {name}.', '🙃 Я бот, я так не умею.'],
+  },
+  denied: {
+    label: '🔒 Кнопка организатора',
+    hint: 'ответ, когда участник пытается сделать то, что может только организатор',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title'],
+    defaults: ['🙅 Не-а.', '🔒 Это кнопка организатора.', '✋ Полегче, это не твоя зона.'],
+  },
   interjections: {
     label: '💥 Междометия',
     hint: 'в начале уведомления, примерно в половине случаев',
@@ -322,3 +372,12 @@ export function isSoft(game, participant) {
 
 // Options for picking phrases addressed to a participant.
 export const toneFor = (game, participant) => ({ soft: isSoft(game, participant) });
+
+// A bot reply with the game's flavor: "<random phrase>\n\n<fixed text>" plus a catchphrase sometimes.
+// Without a game (or participant) the fixed text is returned as is.
+export function flavored(game, key, participant, text, vars = {}) {
+  if (!game || !participant) return text;
+  const tone = toneFor(game, participant);
+  const phrase = pickPhrase(game, key, { name: shortName(participant), title: game.title, ...vars }, tone);
+  return withCatchphrase(game, `${phrase}\n\n${text}`, tone);
+}

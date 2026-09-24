@@ -288,3 +288,18 @@ test('long phrase lists are paginated and stay within the message limit', async 
   await press('A', `phr.del:${code}:gift3.35.3`);
   assert.equal(loadGame().phrases.gift3.length, 34);
 });
+
+test('replies to participant actions carry a phrase from the game pool', async () => {
+  const code = await setupGame();
+  const game = loadGame();
+  game.phrases = { idle: [{ id: 1, text: 'Хз, чел', by: 'import' }], denied: [{ id: 2, text: 'Руки прочь', by: 'import' }] };
+  env.DB.db.prepare('UPDATE games SET data = ? WHERE code = ?').run(JSON.stringify(game), code);
+  const random = Math.random;
+  Math.random = () => 0.999; // no flavor words, the last phrase in the pool = the game's own
+  try {
+    assert.match((await say('B', 'привет бот'))[0].text, /^Хз, чел\n\nПользуйся кнопками/);
+    assert.match((await press('B', `draw:${code}`))[0].text, /^Руки прочь\n\nЭто может сделать только организатор/);
+  } finally {
+    Math.random = random;
+  }
+});
