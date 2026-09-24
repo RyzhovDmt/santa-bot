@@ -153,10 +153,10 @@ test('anonymous chat both ways, media rules, wish updates reach Santa', async ()
   const photo = await sendMedia(bReceiver, { photo: [{ file_id: 'p', file_unique_id: 'p', width: 1, height: 1 }] });
   assert.ok(photo.some((m) => m.method === 'copyMessage' && m.to === NAME_TO_ID.B));
 
-  // After a relay the mode is reset: next text is not sent anywhere.
+  // After a relay the mode is reset: next text is just chat with the bot, not sent anywhere.
   const after = await say(bReceiver, 'просто текст');
   assert.equal(after.length, 1);
-  assert.match(after[0].text, /Что можно сделать/);
+  assert.equal(after[0].to, NAME_TO_ID[bReceiver]);
 
   const bSanta = ID_TO_NAME[Object.keys(pairs).find((g) => pairs[g] === NAME_TO_ID.B)];
   await press('B', `wish.add:${code}`);
@@ -305,12 +305,31 @@ test('long phrase lists are paginated and stay within the message limit', async 
 
 test('replies to participant actions carry a phrase from the game pool', async () => {
   const code = await setupGame();
-  setPhrases(code, { idle: [{ id: 1, text: 'Хз, чел', by: 'import' }], denied: [{ id: 2, text: 'Руки прочь', by: 'import' }] });
+  setPhrases(code, { chat: [{ id: 1, text: 'Хз, чел', by: 'import' }], denied: [{ id: 2, text: 'Руки прочь', by: 'import' }] });
   const random = Math.random;
-  Math.random = () => 0.999; // no flavor words, the last phrase in the pool = the game's own
+  Math.random = () => 0.999; // no flavor words, no hints, the last phrase in the pool = the game's own
   try {
-    assert.match((await say('B', 'привет бот'))[0].text, /^Хз, чел\n\nЧто можно сделать:/);
+    assert.equal((await say('B', 'привет бот'))[0].text, 'Хз, чел');
     assert.match((await press('B', `draw:${code}`))[0].text, /^Руки прочь\n\nЭто может сделать только организатор/);
+  } finally {
+    Math.random = random;
+  }
+});
+
+test('free chat: a phrase sharing a word with the message is preferred, hints come sometimes', async () => {
+  const code = await setupGame();
+  setPhrases(code, { catchphrases: [{ id: 1, text: 'Сырков можно не просить', by: 'import' }] });
+  const random = Math.random;
+  try {
+    Math.random = () => 0; // take the match, always add the hint block
+    const withHints = (await say('B', 'А сырки будут?'))[0].text;
+    assert.match(withHints, /^Сырков можно не просить/);
+    assert.match(withHints, /Что можно сделать:/);
+
+    Math.random = () => 0.5; // match (< 0.8), no hints (>= 0.2)
+    const plain = (await say('B', 'сырки!'))[0].text;
+    assert.match(plain, /^Сырков можно не просить/);
+    assert.doesNotMatch(plain, /Что можно сделать/);
   } finally {
     Math.random = random;
   }

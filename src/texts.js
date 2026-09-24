@@ -189,6 +189,13 @@ export const PHRASES = {
     placeholders: ['name', 'title'],
     defaults: ['🤔 Не понял, но звучит интересно.', '👇 Кнопки внизу, {name}.', '🙃 Я бот, я так не умею.'],
   },
+  chat: {
+    label: '💬 Болтовня',
+    hint: 'ответ, когда с ботом просто переписываются; если в сообщении есть слово из какой-то фразы коллекции, бот чаще отвечает ею',
+    menuGroup: 'replies',
+    placeholders: ['name', 'title'],
+    defaults: ['😎 Согласен.', '🤔 Интересная мысль, {name}.', '🎅 Санта всё слышит.', '🙃 Ну допустим.', '🎄 Хо-хо-хо.'],
+  },
   denied: {
     label: '🔒 Кнопка организатора',
     hint: 'ответ, когда участник пытается сделать то, что может только организатор',
@@ -358,6 +365,53 @@ export function pickPhrase(game, key, vars, options) {
 export function withCatchphrase(game, text, options) {
   const phrase = pickFlavor(game, 'catchphrases', CATCHPHRASE_CHANCE, pickOptions(options));
   return phrase ? `${text}\n\n💬 ${phrase}` : text;
+}
+
+// Free chat with the bot: answer with a phrase from the whole collection that can be rendered
+// without game context ({name}/{title} only). A phrase sharing a word with the message is preferred.
+const CHAT_PLACEHOLDERS = ['name', 'title'];
+const CHAT_MATCH_CHANCE = 0.8;
+const MIN_WORD = 4;
+// Frequent words that would match almost anything.
+const STOP_WORDS = new Set(['будет', 'будут', 'когда', 'можно', 'сегодня', 'привет', 'вообще', 'просто', 'очень', 'тоже', 'есть', 'если', 'чтобы', 'какой', 'какая', 'этот', 'только', 'меня', 'тебя']);
+// "сырки" -> "сырк": dropping the ending lets it match "сырков", "сырок"… (at least MIN_WORD letters kept).
+const stem = (word) => word.slice(0, Math.max(MIN_WORD, word.length - 2));
+
+function chatPool(game) {
+  const pool = [];
+  for (const [key, phrase] of Object.entries(PHRASES)) {
+    if (key === 'interjections' || key === 'addresses') continue;
+    for (const item of [...phrase.defaults.map((text) => ({ text })), ...customPhrases(game, key)]) {
+      if (placeholdersIn(item.text).every((p) => CHAT_PLACEHOLDERS.includes(p))) pool.push(item);
+    }
+  }
+  return pool;
+}
+
+// Lowercased word stems of a message: "Сырки будут?" -> ["сырки", "будут"].
+function stems(text) {
+  const words = [];
+  let word = '';
+  for (const ch of `${text.toLowerCase()} `) {
+    if (ch.toLowerCase() !== ch.toUpperCase()) word += ch === 'ё' ? 'е' : ch;
+    else {
+      if (word.length >= MIN_WORD && !STOP_WORDS.has(word)) words.push(stem(word));
+      word = '';
+    }
+  }
+  return words;
+}
+
+export function chatReply(game, participant, message, options) {
+  const opts = pickOptions(options);
+  const vars = { name: shortName(participant), title: game.title };
+  const words = stems(message);
+  const normalize = (text) => text.toLowerCase().replaceAll('ё', 'е');
+  const matches = words.length ? chatPool(game).filter((item) => words.some((w) => normalize(item.text).includes(w))) : [];
+  const text = matches.length && opts.random() < CHAT_MATCH_CHANCE
+    ? decorate(game, renderPhrase(weightedPick(matches, opts.soft, opts.random).text, vars), opts)
+    : pickPhrase(game, 'chat', vars, opts);
+  return withCatchphrase(game, text, opts);
 }
 
 // Name without "(@username)" reads better inside a sentence.

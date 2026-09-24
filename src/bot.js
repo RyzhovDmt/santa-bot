@@ -5,9 +5,11 @@ import * as game from './handlers/game.js';
 import * as phrases from './handlers/phrases.js';
 import * as wish from './handlers/wish.js';
 import { Store } from './storage.js';
-import { flavored } from './texts.js';
+import { chatReply, flavored, toneFor } from './texts.js';
 import { BTN, BUTTON_LABELS, HELP, mainMenu } from './ui.js';
 
+// In free chat, button hints are added to about every fifth reply.
+const HINT_CHANCE = 0.2;
 const SEND_DELAY_MS = 35; // stay well below Telegram's ~30 msg/s limit
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -169,9 +171,13 @@ export function createApp(env, { apiTransformer } = {}) {
     }
 
     if (!current) return ctx.reply(`Ты пока не в игре. Попроси у организатора ссылку-приглашение или создай свою: «${BTN.create}».`, mainMenu());
+    // Free chat: the bot answers with a phrase from the collection; button hints come now and then.
+    const participant = current.participants[userId];
+    const reply = text ? chatReply(current, participant, text, toneFor(current, participant)) : flavored(current, 'idle', participant, '');
+    if (Math.random() >= HINT_CHANCE) return ctx.reply(reply.trim(), mainMenu(current));
     const hints = [`«${BTN.wish}» — изменить или дополнить пожелание`];
     if (current.status !== 'open') hints.push(`«${BTN.whom}» — получатель и переписка с ним`, `«${BTN.toSanta}» — написать своему Санте`);
-    return ctx.reply(flavored(current, 'idle', current.participants[userId], `Что можно сделать:\n${hints.join('\n')}`), mainMenu(current));
+    return ctx.reply(`${reply.trim()}\n\nЧто можно сделать:\n${hints.join('\n')}`, mainMenu(current));
   });
 
   bot.catch(async (err) => {
