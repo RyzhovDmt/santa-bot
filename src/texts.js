@@ -370,6 +370,9 @@ export function withCatchphrase(game, text, options) {
 // Free chat with the bot: answer with a phrase from the whole collection that can be rendered
 // without game context ({name}/{title} only). A phrase sharing a word with the message is preferred.
 const CHAT_PLACEHOLDERS = ['name', 'title'];
+// Event-bound phrases ("X joins", "gift bought", …) sound off in a chat; reminders' teasing and generic replies fit.
+const CHAT_KEYS = new Set(['chat', 'idle', 'catchphrases']);
+const CHAT_SOURCE = (key) => CHAT_KEYS.has(key) || PHRASES[key]?.stage || key === 'lastDay';
 const CHAT_MATCH_CHANCE = 0.8;
 const MIN_WORD = 4;
 // Frequent words that would match almost anything.
@@ -380,7 +383,7 @@ const stem = (word) => word.slice(0, Math.max(MIN_WORD, word.length - 2));
 function chatPool(game) {
   const pool = [];
   for (const [key, phrase] of Object.entries(PHRASES)) {
-    if (key === 'interjections' || key === 'addresses') continue;
+    if (!CHAT_SOURCE(key)) continue;
     for (const item of [...phrase.defaults.map((text) => ({ text })), ...customPhrases(game, key)]) {
       if (placeholdersIn(item.text).every((p) => CHAT_PLACEHOLDERS.includes(p))) pool.push(item);
     }
