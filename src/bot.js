@@ -171,7 +171,7 @@ export function createApp(env, { apiTransformer } = {}) {
     if (!current) return ctx.reply(`Ты пока не в игре. Попроси у организатора ссылку-приглашение или создай свою: «${BTN.create}».`, mainMenu());
     const hints = [`«${BTN.wish}» — изменить или дополнить пожелание`];
     if (current.status !== 'open') hints.push(`«${BTN.whom}» — получатель и переписка с ним`, `«${BTN.toSanta}» — написать своему Санте`);
-    return ctx.reply(flavored(current, 'idle', current.participants[userId], `Пользуйся кнопками внизу 👇\n\n${hints.join('\n')}`), mainMenu(current));
+    return ctx.reply(flavored(current, 'idle', current.participants[userId], `Что можно сделать:\n${hints.join('\n')}`), mainMenu(current));
   });
 
   bot.catch(async (err) => {
