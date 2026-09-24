@@ -16,7 +16,7 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_CUSTOM_PHRASES, PHRASES, validatePhrase } from '../src/texts.js';
+import { PHRASES, maxCustomPhrases, validatePhrase } from '../src/texts.js';
 
 const [packPath, code, ...flags] = process.argv.slice(2);
 if (!packPath || !code) {
@@ -61,7 +61,7 @@ for (const [key, texts] of Object.entries(pack)) {
     const error = validatePhrase(key, text);
     if (error) report.push(`✘ ${key}: "${text}" — ${error.split('\n')[0]}`);
     else if (list.some((p) => p.text === text)) continue;
-    else if (list.length >= MAX_CUSTOM_PHRASES) report.push(`✘ ${key}: limit ${MAX_CUSTOM_PHRASES} reached, "${text}" skipped`);
+    else if (list.length >= maxCustomPhrases(key)) report.push(`✘ ${key}: limit ${maxCustomPhrases(key)} reached, "${text}" skipped`);
     else {
       game.nextPhraseId = (game.nextPhraseId ?? 0) + 1;
       list.push({ id: game.nextPhraseId, text, by: 'import', ...(harsh && { harsh: true }) });

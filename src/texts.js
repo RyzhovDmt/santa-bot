@@ -3,7 +3,11 @@
 // Defaults can be edited here; each game can add its own phrases from the bot.
 
 export const MAX_PHRASE_LENGTH = 300;
-export const MAX_CUSTOM_PHRASES = 20;
+const MAX_CUSTOM_PHRASES = 100;
+const MAX_CUSTOM_FLAVOR = 200;
+
+// Own phrases per notification in a game; short flavor lists may be longer.
+export const maxCustomPhrases = (key) => (PHRASES[key]?.flavor ? MAX_CUSTOM_FLAVOR : MAX_CUSTOM_PHRASES);
 
 // Reminder tone escalates with the number of the reminder a participant gets (1st, 2nd, ...).
 // A stage applies from its `from` number up to the next stage; the last stage covers the rest.

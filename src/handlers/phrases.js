@@ -1,9 +1,11 @@
 import {
-  MAX_CUSTOM_PHRASES, PHRASE_GROUPS, PHRASES, PLACEHOLDER_HELP, customPhrases, phraseLabel, validatePhrase,
+  PHRASE_GROUPS, PHRASES, PLACEHOLDER_HELP, customPhrases, maxCustomPhrases, phraseLabel, validatePhrase,
 } from '../texts.js';
 import { button, cancelKeyboard, inline } from '../ui.js';
 
 const DELETE_BUTTONS_PER_ROW = 5;
+// 10 phrases of up to 300 chars + defaults stay under Telegram's 4096-char message limit.
+const PAGE_SIZE = 10;
 
 const canDelete = (game, userId, phrase) => game.ownerId === userId || phrase.by === userId;
 
@@ -37,25 +39,34 @@ function groupView(game, group) {
   };
 }
 
-function keyView(game, key, userId) {
+function keyView(game, key, userId, requestedPage = 0) {
   const phrase = PHRASES[key];
   const custom = customPhrases(game, key);
+  const pages = Math.max(1, Math.ceil(custom.length / PAGE_SIZE));
+  const page = Math.min(Math.max(requestedPage, 0), pages - 1);
+  const shown = custom.map((p, i) => ({ p, i })).slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const lines = [
     `${phraseLabel(key)} — ${phrase.hint}`,
     '',
     ...(phrase.defaults.length ? ['Стандартные:', ...phrase.defaults.map((text) => `• ${text}`), ''] : []),
-    'Добавленные в игре:',
-    ...(custom.length ? custom.map((p, i) => `${i + 1}. ${p.text}`) : ['пока нет']),
+    `Добавленные в игре (${custom.length})${pages > 1 ? `, стр. ${page + 1} из ${pages}` : ''}:`,
+    ...(custom.length ? shown.map(({ p, i }) => `${i + 1}. ${p.text}`) : ['пока нет']),
     ...(phrase.placeholders.length
       ? ['', 'Подстановки:', ...phrase.placeholders.map((p) => `{${p}} — ${PLACEHOLDER_HELP[p]}`)]
       : []),
   ];
 
   const rows = [];
-  if (custom.length < MAX_CUSTOM_PHRASES) rows.push([button('➕ Добавить фразу', 'phr.add', game.code, key)]);
-  const deletable = custom.map((p, i) => ({ p, i })).filter(({ p }) => canDelete(game, userId, p));
+  if (custom.length < maxCustomPhrases(key)) rows.push([button('➕ Добавить фразу', 'phr.add', game.code, key)]);
+  const deletable = shown.filter(({ p }) => canDelete(game, userId, p));
   for (let i = 0; i < deletable.length; i += DELETE_BUTTONS_PER_ROW) {
-    rows.push(deletable.slice(i, i + DELETE_BUTTONS_PER_ROW).map(({ p, i: n }) => button(`🗑 ${n + 1}`, 'phr.del', game.code, `${key}.${p.id}`)));
+    rows.push(deletable.slice(i, i + DELETE_BUTTONS_PER_ROW).map(({ p, i: n }) => button(`🗑 ${n + 1}`, 'phr.del', game.code, `${key}.${p.id}.${page}`)));
+  }
+  if (pages > 1) {
+    rows.push([
+      ...(page > 0 ? [button('◀️', 'phr.key', game.code, `${key}.${page - 1}`)] : []),
+      ...(page < pages - 1 ? [button('▶️', 'phr.key', game.code, `${key}.${page + 1}`)] : []),
+    ]);
   }
   const group = phrase.menuGroup;
   rows.push([group
@@ -68,7 +79,7 @@ const edit = (ctx, view) => ctx.editMessageText(view.text, view.keyboard).catch(
 
 async function askPhrase(app, ctx, game, userId, key) {
   if (!PHRASES[key]) return;
-  if (customPhrases(game, key).length >= MAX_CUSTOM_PHRASES) return ctx.reply(`Уже ${MAX_CUSTOM_PHRASES} фраз — это максимум. Удали какую-нибудь, чтобы добавить новую.`);
+  if (customPhrases(game, key).length >= maxCustomPhrases(key)) return ctx.reply(`Уже ${maxCustomPhrases(key)} фраз — это максимум. Удали какую-нибудь, чтобы добавить новую.`);
   app.store.setMode(userId, { type: 'phrase', code: game.code, key });
   await app.store.save();
   const phrase = PHRASES[key];
@@ -85,7 +96,7 @@ async function addPhrase(app, ctx, game, mode) {
   if (!text) return ctx.reply('Фразу нужно прислать текстом.');
   const error = validatePhrase(mode.key, text);
   if (error) return ctx.reply(`${error}\n\nПопробуй ещё раз:`);
-  if (customPhrases(game, mode.key).length >= MAX_CUSTOM_PHRASES) return ctx.reply(`Уже ${MAX_CUSTOM_PHRASES} фраз — это максимум.`);
+  if (customPhrases(game, mode.key).length >= maxCustomPhrases(mode.key)) return ctx.reply(`Уже ${maxCustomPhrases(mode.key)} фраз — это максимум.`);
 
   game.phrases ??= {};
   game.phrases[mode.key] ??= [];
@@ -99,15 +110,16 @@ async function addPhrase(app, ctx, game, mode) {
 }
 
 async function deletePhrase(app, ctx, game, userId, arg) {
-  const [key, id] = (arg ?? '').split('.');
+  const [key, id, page] = (arg ?? '').split('.');
+  if (!PHRASES[key]) return;
   const list = customPhrases(game, key);
   const phrase = list.find((p) => String(p.id) === id);
-  if (!phrase) return edit(ctx, keyView(game, key, userId));
+  if (!phrase) return edit(ctx, keyView(game, key, userId, Number(page) || 0));
   if (!canDelete(game, userId, phrase)) return ctx.reply('Удалить можно только свою фразу.');
 
   game.phrases[key] = list.filter((p) => p !== phrase);
   await app.store.save();
-  return edit(ctx, keyView(game, key, userId));
+  return edit(ctx, keyView(game, key, userId, Number(page) || 0));
 }
 
 export function register(app) {
@@ -116,7 +128,11 @@ export function register(app) {
     return arg === 'edit' ? edit(ctx, view) : ctx.reply(view.text, view.keyboard);
   });
   app.onAction('phr.group', (ctx, game, userId, group) => PHRASE_GROUPS[group] && edit(ctx, groupView(game, group)));
-  app.onAction('phr.key', (ctx, game, userId, key) => PHRASES[key] && edit(ctx, keyView(game, key, userId)));
+  // arg: "<key>" or "<key>.<page>"
+  app.onAction('phr.key', (ctx, game, userId, arg = '') => {
+    const [key, page] = arg.split('.');
+    return PHRASES[key] && edit(ctx, keyView(game, key, userId, Number(page) || 0));
+  });
   app.onAction('phr.add', (ctx, game, userId, key) => askPhrase(app, ctx, game, userId, key));
   app.onAction('phr.del', (ctx, game, userId, arg) => deletePhrase(app, ctx, game, userId, arg));
 }

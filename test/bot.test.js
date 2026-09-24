@@ -269,3 +269,22 @@ test('only the organizer toggles soft mode', async () => {
   assert.equal(loadGame().participants[NAME_TO_ID.C].soft, true);
   assert.match((await press('B', `soft.toggle:${code}:${NAME_TO_ID.C}`))[0].text, /только организатор/);
 });
+
+test('long phrase lists are paginated and stay within the message limit', async () => {
+  const code = await setupGame();
+  const game = loadGame();
+  game.phrases = { gift3: Array.from({ length: 35 }, (_, i) => ({ id: i + 1, text: `${'x'.repeat(280)} ${i + 1}`, by: 'import' })) };
+  env.DB.db.prepare('UPDATE games SET data = ? WHERE code = ?').run(JSON.stringify(game), code);
+
+  const first = await press('A', `phr.key:${code}:gift3`);
+  assert.match(first[0].text, /Добавленные в игре \(35\), стр\. 1 из 4/);
+  assert.ok(first[0].text.length < 4096, `message is ${first[0].text.length} chars`);
+  assert.ok(buttons(first[0]).includes(`phr.key:${code}:gift3.1`));
+
+  const last = await press('A', `phr.key:${code}:gift3.3`);
+  assert.match(last[0].text, /стр\. 4 из 4/);
+  assert.match(last[0].text, /35\. x+ 35/);
+
+  await press('A', `phr.del:${code}:gift3.35.3`);
+  assert.equal(loadGame().phrases.gift3.length, 34);
+});
