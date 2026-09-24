@@ -212,7 +212,7 @@ test('phrase menu has reminder groups with stages', async () => {
   assert.ok(buttons(stage[0]).includes(`phr.group:${code}:gift`));
 });
 
-test('participants add phrases, only author or organizer can delete, phrases appear in notifications', async () => {
+test('participants add phrases, only the organizer deletes, phrases appear in notifications', async () => {
   const code = await setupGame();
 
   const menu = await press('B', `phr.menu:${code}`);
@@ -227,11 +227,14 @@ test('participants add phrases, only author or organizer can delete, phrases app
   const phraseId = game.phrases.draw[0].id;
   assert.equal(game.phrases.draw[0].by, NAME_TO_ID.B);
 
-  // Another participant sees the phrase but gets no delete button for it.
+  // Participants, even the author, see phrases but get no delete buttons.
   const cView = await press('C', `phr.key:${code}:draw`);
   assert.match(cView[0].text, /1\. \{receiver\}, это от всего сердца!/);
-  assert.ok(!buttons(cView[0]).includes(`phr.del:${code}:draw.${phraseId}`));
-  assert.match((await press('C', `phr.del:${code}:draw.${phraseId}`))[0].text, /только свою/);
+  assert.ok(!buttons(cView[0]).some((b) => b.startsWith('phr.del')));
+  const bView = await press('B', `phr.key:${code}:draw`);
+  assert.ok(!buttons(bView[0]).some((b) => b.startsWith('phr.del')));
+  assert.match((await press('B', `phr.del:${code}:draw.${phraseId}.0`))[0].text, /только организатор/);
+  assert.ok(buttons((await press('A', `phr.key:${code}:draw`))[0]).includes(`phr.del:${code}:draw.${phraseId}.0`));
   // The author isn't shown to anyone.
   assert.doesNotMatch(cView[0].text, /Борис/);
 

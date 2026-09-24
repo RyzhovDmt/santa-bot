@@ -7,7 +7,8 @@ const DELETE_BUTTONS_PER_ROW = 5;
 // 10 phrases of up to 300 chars + defaults stay under Telegram's 4096-char message limit.
 const PAGE_SIZE = 10;
 
-const canDelete = (game, userId, phrase) => game.ownerId === userId || phrase.by === userId;
+// Participants can only add phrases; deleting is up to the organizer.
+const canDelete = (game, userId) => game.ownerId === userId;
 
 const phraseCount = (game, key) => PHRASES[key].defaults.length + customPhrases(game, key).length;
 const keysOf = (group) => Object.keys(PHRASES).filter((key) => PHRASES[key].menuGroup === group);
@@ -58,7 +59,7 @@ function keyView(game, key, userId, requestedPage = 0) {
 
   const rows = [];
   if (custom.length < maxCustomPhrases(key)) rows.push([button('➕ Добавить фразу', 'phr.add', game.code, key)]);
-  const deletable = shown.filter(({ p }) => canDelete(game, userId, p));
+  const deletable = canDelete(game, userId) ? shown : [];
   for (let i = 0; i < deletable.length; i += DELETE_BUTTONS_PER_ROW) {
     rows.push(deletable.slice(i, i + DELETE_BUTTONS_PER_ROW).map(({ p, i: n }) => button(`🗑 ${n + 1}`, 'phr.del', game.code, `${key}.${p.id}.${page}`)));
   }
@@ -115,7 +116,7 @@ async function deletePhrase(app, ctx, game, userId, arg) {
   const list = customPhrases(game, key);
   const phrase = list.find((p) => String(p.id) === id);
   if (!phrase) return edit(ctx, keyView(game, key, userId, Number(page) || 0));
-  if (!canDelete(game, userId, phrase)) return ctx.reply('Удалить можно только свою фразу.');
+  if (!canDelete(game, userId)) return ctx.reply('Удалять фразы может только организатор.');
 
   game.phrases[key] = list.filter((p) => p !== phrase);
   await app.store.save();
