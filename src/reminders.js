@@ -3,8 +3,8 @@ import { loadActiveGames, markReminder } from './storage.js';
 import { pickPhrase, shortName, stageKey, toneFor, withCatchphrase } from './texts.js';
 import { button, daysText, inline } from './ui.js';
 
-const WISH_EVERY_DAYS = 2;
-const GIFT_EVERY_DAYS = 5;
+const WISH_EVERY_DAYS = 1;
+const GIFT_EVERY_DAYS = 1;
 
 // Which reminders are due for the game today. Schedule is counted back from the date itself,
 // so reminders don't depend on when the date was set or when the bot was restarted.
