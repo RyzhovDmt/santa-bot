@@ -190,6 +190,26 @@ test('cron sends due reminders once a day and only after the reminder hour', asy
   sent = [];
   await runReminders(app, env.DB, { hour: 11, now: at(10) });
   assert.equal(sent.length, 0);
+
+  // Reminder numbers are counted per participant: A and B got one, C (gift bought) none.
+  const counts = env.DB.db.prepare("SELECT user_id, count FROM reminder_counts WHERE kind = 'gift' ORDER BY user_id").all();
+  assert.deepEqual(counts.map((r) => [ID_TO_NAME[r.user_id], r.count]), [['A', 1], ['B', 1]]);
+
+  // Next due day (5 days later): the second reminder bumps the numbers again.
+  await runReminders(app, env.DB, { hour: 11, now: new Date(at(9).getTime() + 5 * 86_400_000) });
+  const after = env.DB.db.prepare("SELECT count FROM reminder_counts WHERE kind = 'gift'").all();
+  assert.deepEqual(after.map((r) => r.count), [2, 2]);
+});
+
+test('phrase menu has reminder groups with stages', async () => {
+  const code = await setupGame();
+  const menu = await press('A', `phr.menu:${code}`);
+  assert.ok(buttons(menu[0]).includes(`phr.group:${code}:wish`));
+  const group = await press('A', `phr.group:${code}:gift`);
+  assert.deepEqual(buttons(group[0]).filter((b) => b.startsWith('phr.key')).length, 7);
+  const stage = await press('A', `phr.key:${code}:gift7`);
+  assert.match(stage[0].text, /7-е и дальше/);
+  assert.ok(buttons(stage[0]).includes(`phr.group:${code}:gift`));
 });
 
 test('participants add phrases, only author or organizer can delete, phrases appear in notifications', async () => {

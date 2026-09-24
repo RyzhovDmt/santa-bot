@@ -1,5 +1,5 @@
 import {
-  MAX_CUSTOM_PHRASES, PHRASES, PLACEHOLDER_HELP, customPhrases, phraseLabel, validatePhrase,
+  MAX_CUSTOM_PHRASES, PHRASE_GROUPS, PHRASES, PLACEHOLDER_HELP, customPhrases, phraseLabel, validatePhrase,
 } from '../texts.js';
 import { button, cancelKeyboard, inline } from '../ui.js';
 
@@ -7,13 +7,32 @@ const DELETE_BUTTONS_PER_ROW = 5;
 
 const canDelete = (game, userId, phrase) => game.ownerId === userId || phrase.by === userId;
 
+const phraseCount = (game, key) => PHRASES[key].defaults.length + customPhrases(game, key).length;
+const keysOf = (group) => Object.keys(PHRASES).filter((key) => PHRASES[key].menuGroup === group);
+
+// Top level: single notifications and reminder groups; a group opens a list of its stages.
 function menuView(game) {
-  const rows = Object.entries(PHRASES).map(([key, p]) => {
-    const count = p.defaults.length + customPhrases(game, key).length;
-    return [button(`${phraseLabel(key)} (${count})`, 'phr.key', game.code, key)];
-  });
+  const rows = [];
+  const shownGroups = new Set();
+  for (const [key, p] of Object.entries(PHRASES)) {
+    if (!p.menuGroup) {
+      rows.push([button(`${phraseLabel(key)} (${phraseCount(game, key)})`, 'phr.key', game.code, key)]);
+    } else if (!shownGroups.has(p.menuGroup)) {
+      shownGroups.add(p.menuGroup);
+      rows.push([button(`${PHRASE_GROUPS[p.menuGroup]} ▸`, 'phr.group', game.code, p.menuGroup)]);
+    }
+  }
   return {
     text: `💬 Фразы уведомлений игры «${game.title}»\n\nВ каждом уведомлении бот выбирает случайную фразу из списка. Добавь свои — они появятся в уведомлениях всех участников этой игры. Авторы фраз не показываются.\n\nВыбери уведомление:`,
+    keyboard: inline(rows),
+  };
+}
+
+function groupView(game, group) {
+  const rows = keysOf(group).map((key) => [button(`${phraseLabel(key)} (${phraseCount(game, key)})`, 'phr.key', game.code, key)]);
+  rows.push([button('← Все уведомления', 'phr.menu', game.code, 'edit')]);
+  return {
+    text: `${PHRASE_GROUPS[group]}\n\nЧем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:`,
     keyboard: inline(rows),
   };
 }
@@ -40,7 +59,10 @@ function keyView(game, key, userId) {
   for (let i = 0; i < deletable.length; i += DELETE_BUTTONS_PER_ROW) {
     rows.push(deletable.slice(i, i + DELETE_BUTTONS_PER_ROW).map(({ p, i: n }) => button(`🗑 ${n + 1}`, 'phr.del', game.code, `${key}.${p.id}`)));
   }
-  rows.push([button('← Все уведомления', 'phr.menu', game.code, 'edit')]);
+  const group = phrase.menuGroup;
+  rows.push([group
+    ? button(`← ${PHRASE_GROUPS[group]}`, 'phr.group', game.code, group)
+    : button('← Все уведомления', 'phr.menu', game.code, 'edit')]);
   return { text: lines.join('\n'), keyboard: inline(rows) };
 }
 
@@ -91,6 +113,7 @@ export function register(app) {
     const view = menuView(game);
     return arg === 'edit' ? edit(ctx, view) : ctx.reply(view.text, view.keyboard);
   });
+  app.onAction('phr.group', (ctx, game, userId, group) => PHRASE_GROUPS[group] && edit(ctx, groupView(game, group)));
   app.onAction('phr.key', (ctx, game, userId, key) => PHRASES[key] && edit(ctx, keyView(game, key, userId)));
   app.onAction('phr.add', (ctx, game, userId, key) => askPhrase(app, ctx, game, userId, key));
   app.onAction('phr.del', (ctx, game, userId, arg) => deletePhrase(app, ctx, game, userId, arg));

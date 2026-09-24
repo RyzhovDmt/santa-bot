@@ -26,6 +26,9 @@ export function dueReminders(game, today) {
   return due;
 }
 
+// Number of the reminder this participant is about to get (1 for the first one).
+const reminderNumber = (game, kind, userId) => (game.reminderCounts?.[kind]?.[userId] ?? 0) + 1;
+
 export function reminderMessages(game, reminder) {
   const c = game.code;
   const entries = Object.entries(game.participants);
@@ -39,7 +42,9 @@ export function reminderMessages(game, reminder) {
     return entries.filter(([, p]) => !p.wishReady).map(([to, p]) => ({
       to,
       text: [
-        pickPhrase(game, stageKey('wish', reminder.daysLeft), { name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date }),
+        pickPhrase(game, lastDay ? 'lastDay' : stageKey('wish', reminderNumber(game, 'wish', to)), {
+          name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date, count: reminderNumber(game, 'wish', to),
+        }),
         '',
         info,
         'Напиши пожелание и отметь его готовым.',
@@ -62,7 +67,10 @@ export function reminderMessages(game, reminder) {
   return entries.filter(([, p]) => !p.giftBought).map(([to, p]) => ({
     to,
     text: [
-      pickPhrase(game, stageKey('gift', reminder.daysLeft), { name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date, receiver: game.participants[game.pairs[to]].name }),
+      pickPhrase(game, stageKey('gift', reminderNumber(game, 'gift', to)), {
+        name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date,
+        receiver: game.participants[game.pairs[to]].name, count: reminderNumber(game, 'gift', to),
+      }),
       '',
       `До вручения подарков в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${date}).`,
       `Ты даришь: ${game.participants[game.pairs[to]].name}`,
@@ -88,7 +96,7 @@ export async function runReminders(app, db, { hour, now = new Date() }) {
       const messages = reminderMessages(game, reminder);
       if (1 + messages.length > budget) continue;
       budget -= 1 + messages.length;
-      await markReminder(db, game.code, reminder.kind, today);
+      await markReminder(db, game.code, reminder.kind, today, messages.map((m) => m.to));
       await app.broadcast(messages);
     }
   }

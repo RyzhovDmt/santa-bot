@@ -2,10 +2,101 @@
 // added by the bot, so a phrase can't drop important details (receiver, dates, wish).
 // Defaults can be edited here; each game can add its own phrases from the bot.
 
-import { plural } from './ui.js';
-
 export const MAX_PHRASE_LENGTH = 300;
 export const MAX_CUSTOM_PHRASES = 20;
+
+// Reminder tone escalates with the number of the reminder a participant gets (1st, 2nd, ...).
+// A stage applies from its `from` number up to the next stage; the last stage covers the rest.
+// Change the numbers to move boundaries — labels in the bot follow automatically.
+const STAGE_STARTS = [1, 2, 3, 4, 5, 6, 7];
+
+const WISH_STAGES = [
+  [
+    '✍️ {name}, самое время подумать, что ты хочешь получить.',
+    '🎁 Чем подробнее пожелание, тем точнее подарок.',
+    '🎄 Санта уже собирается в путь — расскажи ему о своей мечте.',
+  ],
+  [
+    '⏰ Санта ждёт твоё пожелание!',
+    '📝 {name}, не забудь про пожелание — Санта очень ждёт.',
+    '🦌 Олени уже запряжены, а пожелания всё нет!',
+  ],
+  [
+    '🤔 {name}, Санта начинает волноваться: пожелания всё нет.',
+    '📬 Почтовый ящик Санты пуст. Исправим?',
+    '🎅 Санта перечитал все письма, а твоего там нет.',
+  ],
+  [
+    '⚠️ {name}, это уже {count}-е напоминание про пожелание!',
+    '😬 Эльфы уже шепчутся: пожелания от тебя всё нет.',
+    '🧦 Без пожелания рискуешь получить носки. Опять.',
+  ],
+  [
+    '🚨 {name}, Санта почти отчаялся дождаться твоего пожелания!',
+    '📣 Внимание! Пожелание всё ещё не написано!',
+    '🙏 Пожалуйста, {name}, всего пара слов для Санты.',
+  ],
+  [
+    '😤 {count}-е напоминание, {name}. Санта держится из последних сил.',
+    '🔥 Эльфы объявили забастовку, пока ты не напишешь пожелание.',
+    '🦌 Олени отказываются лететь без твоего пожелания.',
+  ],
+  [
+    '🫠 {name}, Санта уже не знает, как ещё тебя попросить.',
+    '📜 Это напоминание № {count}. Легенды о твоём пожелании передают из уст в уста.',
+    '🎁 Ладно, Санта подарит сюрприз. Но пожелание всё-таки напиши!',
+  ],
+];
+
+const GIFT_STAGES = [
+  [
+    '🎄 До праздника ещё {days} — можно спокойно выбрать подарок.',
+    '💡 {name}, самое время присмотреться к подаркам.',
+    '📦 {receiver} уже мечтает о сюрпризе.',
+  ],
+  [
+    '🎁 Подарок сам себя не купит!',
+    '🛍 Самое время заглянуть в магазин.',
+    '🎄 Праздник всё ближе, {name}!',
+  ],
+  [
+    '🤔 {name}, подарок для {receiver} уже выбран?',
+    '🛒 Корзина пуста, а праздник всё ближе.',
+    '🎅 Санта интересуется, как там подарок.',
+  ],
+  [
+    '⚠️ {name}, это уже {count}-е напоминание про подарок!',
+    '⏳ До вручения {days}, а подарок всё не куплен.',
+    '😬 {receiver} ждёт, а подарка всё нет.',
+  ],
+  [
+    '🚨 {name}, пора бежать за подарком!',
+    '🏃 Бегом за подарком — {receiver} ждёт!',
+    '📣 Внимание! Подарок для {receiver} всё ещё не куплен!',
+  ],
+  [
+    '😤 {count}-е напоминание, {name}. Подарок сам не появится.',
+    '🔥 Санта нервно поглядывает на календарь: осталось {days}.',
+    '⏰ Санта не опаздывает. И ты не опоздай!',
+  ],
+  [
+    '🫠 {name}, это напоминание № {count}. Подарок, ну пожалуйста!',
+    '🎁 Последний звонок: {receiver} без подарка не останется, правда?',
+    '🦌 Олени готовы подвезти тебя до магазина.',
+  ],
+];
+
+function stageEntries(group, label, hint, placeholders, stagePhrases) {
+  return Object.fromEntries(STAGE_STARTS.map((from, i) => [
+    `${group}${i + 1}`,
+    { label, hint, menuGroup: group, stage: { group, from }, placeholders, defaults: stagePhrases[i] },
+  ]));
+}
+
+export const PHRASE_GROUPS = {
+  wish: '✍️ Напоминания о пожелании',
+  gift: '🛍 Напоминания о подарке',
+};
 
 export const PHRASES = {
   join: {
@@ -29,85 +120,21 @@ export const PHRASES = {
       '🦌 Олени доставили тебе имя получателя!',
     ],
   },
-  // Reminders are graded by days left: a stage applies from its minDays up to the next stage's minDays - 1.
-  // Change minDays to move the boundaries; labels in the bot follow automatically.
-  wishEarly: {
-    label: '✍️ Пожелание',
-    hint: 'спокойное напоминание, если пожелание не готово',
-    stage: { group: 'wish', minDays: 7 },
-    placeholders: ['name', 'title', 'days', 'date'],
-    defaults: [
-      '✍️ {name}, самое время подумать, что ты хочешь получить.',
-      '🎁 Чем подробнее пожелание, тем точнее подарок.',
-      '🎄 Санта уже собирается в путь — расскажи ему о своей мечте.',
-    ],
-  },
-  wishSoon: {
-    label: '✍️ Пожелание',
-    hint: 'дедлайн приближается, а пожелание не готово',
-    stage: { group: 'wish', minDays: 3 },
-    placeholders: ['name', 'title', 'days', 'date'],
-    defaults: [
-      '⏰ Санта ждёт твоё пожелание!',
-      '🦌 Олени уже запряжены, а пожелания всё нет!',
-      '📝 {name}, осталось {days} — не откладывай пожелание.',
-    ],
-  },
-  wishClose: {
-    label: '✍️ Пожелание',
-    hint: 'срочно: дедлайн почти наступил',
-    stage: { group: 'wish', minDays: 1 },
-    placeholders: ['name', 'title', 'days', 'date'],
-    defaults: [
-      '⚠️ {name}, до дедлайна всего {days}!',
-      '🏃 Санта уже пакует мешок — успей написать пожелание!',
-      '⏳ Совсем скоро жеребьёвка, а твоего пожелания всё нет.',
-    ],
-  },
+  ...stageEntries('wish', '✍️ Пожелание', 'раз в 2 дня до дедлайна, если пожелание не готово',
+    ['name', 'title', 'days', 'date', 'count'], WISH_STAGES),
   lastDay: {
-    label: '🔥 Пожелание',
-    hint: 'в день дедлайна, если пожелание не готово',
-    stage: { group: 'wish', minDays: 0 },
-    placeholders: ['name', 'title', 'date'],
+    label: '🔥 Пожелание: последний день',
+    hint: 'в день дедлайна — вместо обычной ступени',
+    menuGroup: 'wish',
+    placeholders: ['name', 'title', 'date', 'count'],
     defaults: [
       '🔥 Сегодня последний день, чтобы заполнить пожелание!',
       '⏳ {name}, время почти вышло — пожелание нужно сегодня.',
       '🚨 Последний шанс рассказать Санте о своей мечте!',
     ],
   },
-  giftEarly: {
-    label: '🛍 Подарок',
-    hint: 'спокойное напоминание, если подарок не куплен',
-    stage: { group: 'gift', minDays: 15 },
-    placeholders: ['name', 'title', 'days', 'date', 'receiver'],
-    defaults: [
-      '🎄 До праздника ещё {days} — можно спокойно выбрать подарок.',
-      '💡 {name}, самое время присмотреться к подаркам.',
-      '📦 {receiver} уже мечтает о сюрпризе.',
-    ],
-  },
-  giftSoon: {
-    label: '🛍 Подарок',
-    hint: 'вручение приближается, а подарок не куплен',
-    stage: { group: 'gift', minDays: 6 },
-    placeholders: ['name', 'title', 'days', 'date', 'receiver'],
-    defaults: [
-      '🎁 Подарок сам себя не купит!',
-      '🛍 Самое время заглянуть в магазин.',
-      '🎄 Праздник всё ближе, {name}!',
-    ],
-  },
-  giftClose: {
-    label: '🛍 Подарок',
-    hint: 'срочно: вручение совсем скоро',
-    stage: { group: 'gift', minDays: 1 },
-    placeholders: ['name', 'title', 'days', 'date', 'receiver'],
-    defaults: [
-      '🚨 {name}, до вручения всего {days}!',
-      '🏃 Бегом за подарком — {receiver} ждёт!',
-      '⏰ Санта не опаздывает. И ты не опоздай!',
-    ],
-  },
+  ...stageEntries('gift', '🛍 Подарок', 'раз в 5 дней до вручения, если подарок не куплен',
+    ['name', 'title', 'days', 'date', 'receiver', 'count'], GIFT_STAGES),
   reveal: {
     label: '🎉 Раскрытие Сант',
     hint: 'когда организатор раскрывает, кто кому дарил',
@@ -120,24 +147,6 @@ export const PHRASES = {
   },
 };
 
-const daysWord = (n) => plural(n, ['день', 'дня', 'дней']);
-
-// "✍️ Пожелание: за 3–6 дней" for staged reminders, plain label otherwise.
-export function phraseLabel(key) {
-  const { label, stage } = PHRASES[key];
-  if (!stage) return label;
-  if (stage.minDays === 0) return `${label}: последний день`;
-  const next = Object.values(PHRASES)
-    .filter((p) => p.stage?.group === stage.group && p.stage.minDays > stage.minDays)
-    .map((p) => p.stage.minDays)
-    .sort((a, b) => a - b)[0];
-  if (next === undefined) return `${label}: за ${stage.minDays}+ ${daysWord(stage.minDays)}`;
-  const last = next - 1;
-  return last === stage.minDays
-    ? `${label}: за ${last} ${daysWord(last)}`
-    : `${label}: за ${stage.minDays}–${last} ${daysWord(last)}`;
-}
-
 export const PLACEHOLDER_HELP = {
   name: 'имя того, кто получает уведомление',
   title: 'название игры',
@@ -145,7 +154,21 @@ export const PLACEHOLDER_HELP = {
   date: 'дата дедлайна или вручения',
   receiver: 'кому ты даришь',
   santa: 'кто тебе дарит',
+  count: 'номер напоминания этому участнику',
 };
+
+// "✍️ Пожелание: 3-е напоминание" for stages, plain label otherwise.
+export function phraseLabel(key) {
+  const { label, stage } = PHRASES[key];
+  if (!stage) return label;
+  const next = Object.values(PHRASES)
+    .filter((p) => p.stage?.group === stage.group && p.stage.from > stage.from)
+    .map((p) => p.stage.from)
+    .sort((a, b) => a - b)[0];
+  if (next === undefined) return `${label}: ${stage.from}-е и дальше`;
+  const last = next - 1;
+  return last === stage.from ? `${label}: ${last}-е напоминание` : `${label}: ${stage.from}–${last}-е напоминания`;
+}
 
 // "{a} x {b}" -> ['a', 'b']; unclosed braces are ignored.
 export function placeholdersIn(text) {
@@ -170,11 +193,11 @@ export function validatePhrase(key, text) {
 
 export const customPhrases = (game, key) => game.phrases?.[key] ?? [];
 
-// Phrase key for a reminder group ('wish' | 'gift') by days left: the stage with the largest minDays <= daysLeft.
-export function stageKey(group, daysLeft) {
+// Phrase key for a reminder group ('wish' | 'gift') by the reminder number: the stage with the largest from <= number.
+export function stageKey(group, number) {
   const stages = Object.entries(PHRASES)
-    .filter(([, p]) => p.stage?.group === group && daysLeft >= p.stage.minDays)
-    .sort(([, a], [, b]) => b.stage.minDays - a.stage.minDays);
+    .filter(([, p]) => p.stage?.group === group && number >= p.stage.from)
+    .sort(([, a], [, b]) => b.stage.from - a.stage.from);
   return stages[0]?.[0];
 }
 

@@ -111,6 +111,7 @@ export class Store {
       this.db.prepare('UPDATE users SET game = NULL WHERE game = ?').bind(code),
       this.db.prepare("UPDATE users SET mode = NULL WHERE json_extract(mode, '$.code') = ?").bind(code),
       this.db.prepare('DELETE FROM reminders WHERE code = ?').bind(code),
+      this.db.prepare('DELETE FROM reminder_counts WHERE code = ?').bind(code),
       this.db.prepare('DELETE FROM games WHERE code = ?').bind(code),
     );
   }
@@ -122,12 +123,20 @@ export class Store {
   }
 }
 
-// Games that can still have reminders, with their reminder log attached as game.reminders.
+// Games that can still have reminders, with their reminder log attached as game.reminders
+// and per-participant reminder numbers as game.reminderCounts[kind][userId].
 export async function loadActiveGames(db) {
-  const [games, reminders] = await db.batch([
+  const [games, reminders, counts] = await db.batch([
     db.prepare("SELECT data FROM games WHERE status IN ('open', 'drawn')"),
     db.prepare('SELECT code, kind, sent FROM reminders'),
+    db.prepare('SELECT code, user_id, kind, count FROM reminder_counts'),
   ]);
+  const countsByGame = {};
+  for (const row of counts.results) {
+    countsByGame[row.code] ??= {};
+    countsByGame[row.code][row.kind] ??= {};
+    countsByGame[row.code][row.kind][row.user_id] = row.count;
+  }
   const sent = {};
   for (const row of reminders.results) {
     sent[row.code] ??= {};
@@ -136,13 +145,18 @@ export async function loadActiveGames(db) {
   return games.results.map((row) => {
     const game = JSON.parse(row.data);
     game.reminders = sent[game.code] ?? {};
+    game.reminderCounts = countsByGame[game.code] ?? {};
     return game;
   });
 }
 
-export function markReminder(db, code, kind, sent) {
-  return db
-    .prepare('INSERT INTO reminders (code, kind, sent) VALUES (?, ?, ?) ON CONFLICT (code, kind) DO UPDATE SET sent = excluded.sent')
-    .bind(code, kind, sent)
-    .run();
+// Marks the reminder as sent today and bumps reminder numbers of its recipients — one batch, one subrequest.
+export function markReminder(db, code, kind, sent, userIds = []) {
+  return db.batch([
+    db.prepare('INSERT INTO reminders (code, kind, sent) VALUES (?, ?, ?) ON CONFLICT (code, kind) DO UPDATE SET sent = excluded.sent')
+      .bind(code, kind, sent),
+    ...userIds.map((userId) => db
+      .prepare('INSERT INTO reminder_counts (code, user_id, kind, count) VALUES (?, ?, ?, 1) ON CONFLICT (code, user_id, kind) DO UPDATE SET count = count + 1')
+      .bind(code, userId, kind)),
+  ]);
 }

@@ -62,15 +62,29 @@ test('deadline notice goes to the organizer only', () => {
   assert.match(messages[0].text, /1 из 3/);
 });
 
-test('reminder text uses a phrase of the stage matching days left', () => {
-  const game = drawnGame({ giftDate: '2026-12-27', phrases: { giftClose: [{ id: 1, text: 'СРОЧНО, {name}!', by: '2' }] } });
+test('each participant gets the phrase of their own reminder number', () => {
+  const game = drawnGame({
+    giftDate: '2026-12-27',
+    phrases: { gift3: [{ id: 1, text: 'Третий раз, {name}! № {count}', by: '2' }] },
+    reminderCounts: { gift: { 2: 2 } }, // Борис already got 2 reminders, Вика none
+  });
   const random = Math.random;
   Math.random = () => 0.999; // the last phrase in the pool = the game's own
   try {
-    const close = reminderMessages(game, { kind: 'gift', daysLeft: 5 });
-    assert.match(close[0].text, /^СРОЧНО, Борис!/);
-    const soon = reminderMessages(game, { kind: 'gift', daysLeft: 10 });
-    assert.doesNotMatch(soon[0].text, /СРОЧНО/);
+    const [boris, vika] = reminderMessages(game, { kind: 'gift', daysLeft: 10 });
+    assert.match(boris.text, /^Третий раз, Борис! № 3/);
+    assert.doesNotMatch(vika.text, /Третий раз/);
+  } finally {
+    Math.random = random;
+  }
+});
+
+test('last day of the deadline overrides the stage', () => {
+  const game = openGame({ wishDeadline: '2026-12-10', phrases: { lastDay: [{ id: 1, text: 'СЕГОДНЯ!', by: '1' }] } });
+  const random = Math.random;
+  Math.random = () => 0.999;
+  try {
+    assert.match(reminderMessages(game, { kind: 'wish', daysLeft: 0 })[0].text, /^СЕГОДНЯ!/);
   } finally {
     Math.random = random;
   }

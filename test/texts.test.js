@@ -14,10 +14,10 @@ test('renderPhrase substitutes every occurrence', () => {
 });
 
 test('validatePhrase checks placeholders allowed for the notification', () => {
-  assert.equal(validatePhrase('giftSoon', 'Купи подарок для {receiver} до {date}'), null);
+  assert.equal(validatePhrase('gift2', 'Купи подарок для {receiver} до {date}'), null);
   assert.match(validatePhrase('join', 'Тебе дарит {santa}'), /нельзя использовать: \{santa\}/);
-  assert.match(validatePhrase('wishSoon', ''), /пустая/);
-  assert.match(validatePhrase('wishSoon', 'x'.repeat(MAX_PHRASE_LENGTH + 1)), /длинная/);
+  assert.match(validatePhrase('wish2', ''), /пустая/);
+  assert.match(validatePhrase('wish2', 'x'.repeat(MAX_PHRASE_LENGTH + 1)), /длинная/);
 });
 
 test('default phrases use only their own placeholders', () => {
@@ -28,27 +28,27 @@ test('default phrases use only their own placeholders', () => {
 });
 
 test('pickPhrase chooses among defaults and game phrases', () => {
-  const game = { phrases: { giftSoon: [{ id: 1, text: 'Своя фраза для {name}', by: '1' }] } };
-  const pool = PHRASES.giftSoon.defaults.length + 1;
+  const game = { phrases: { gift2: [{ id: 1, text: 'Своя фраза для {name}', by: '1' }] } };
+  const pool = PHRASES.gift2.defaults.length + 1;
   const seen = new Set();
-  for (let i = 0; i < pool; i++) seen.add(pickPhrase(game, 'giftSoon', { name: 'Аня' }, () => (i + 0.5) / pool));
+  for (let i = 0; i < pool; i++) seen.add(pickPhrase(game, 'gift2', { name: 'Аня' }, () => (i + 0.5) / pool));
   assert.equal(seen.size, pool);
   assert.ok(seen.has('Своя фраза для Аня'));
 });
 
-test('reminder stages by days left follow the reminder schedule', () => {
-  assert.deepEqual([12, 8, 7, 6, 4, 3, 2, 1, 0].map((d) => stageKey('wish', d)),
-    ['wishEarly', 'wishEarly', 'wishEarly', 'wishSoon', 'wishSoon', 'wishSoon', 'wishClose', 'wishClose', 'lastDay']);
-  assert.deepEqual([25, 15, 14, 10, 6, 5, 1].map((d) => stageKey('gift', d)),
-    ['giftEarly', 'giftEarly', 'giftSoon', 'giftSoon', 'giftSoon', 'giftClose', 'giftClose']);
+test('reminder stage is chosen by the reminder number, 7+ share the last stage', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 15].map((n) => stageKey('wish', n)),
+    ['wish1', 'wish2', 'wish3', 'wish4', 'wish5', 'wish6', 'wish7', 'wish7', 'wish7']);
+  assert.equal(stageKey('gift', 3), 'gift3');
   assert.notEqual(validatePhrase('lastDay', 'Осталось {days}'), null);
+  assert.equal(validatePhrase('wish4', 'Это {count}-е напоминание'), null);
 });
 
-test('stage labels are derived from minDays', () => {
-  assert.equal(phraseLabel('wishEarly'), '✍️ Пожелание: за 7+ дней');
-  assert.equal(phraseLabel('wishSoon'), '✍️ Пожелание: за 3–6 дней');
-  assert.equal(phraseLabel('wishClose'), '✍️ Пожелание: за 1–2 дня');
+test('stage labels are derived from stage starts', () => {
+  assert.equal(phraseLabel('wish1'), '✍️ Пожелание: 1-е напоминание');
+  assert.equal(phraseLabel('wish6'), '✍️ Пожелание: 6-е напоминание');
+  assert.equal(phraseLabel('wish7'), '✍️ Пожелание: 7-е и дальше');
+  assert.equal(phraseLabel('gift2'), '🛍 Подарок: 2-е напоминание');
   assert.equal(phraseLabel('lastDay'), '🔥 Пожелание: последний день');
-  assert.equal(phraseLabel('giftSoon'), '🛍 Подарок: за 6–14 дней');
   assert.equal(phraseLabel('draw'), '🎲 Жеребьёвка');
 });
