@@ -14,7 +14,7 @@ test('renderPhrase substitutes every occurrence', () => {
 });
 
 test('validatePhrase checks placeholders allowed for the notification', () => {
-  assert.equal(validatePhrase('gift2', 'Купи подарок для {receiver} до {date}'), null);
+  assert.equal(validatePhrase('gift2', '{receiver} ждёт подарок до {date}'), null);
   assert.match(validatePhrase('join', 'Тебе дарит {santa}'), /нельзя использовать: \{santa\}/);
   assert.match(validatePhrase('wish2', ''), /пустая/);
   assert.match(validatePhrase('wish2', 'x'.repeat(MAX_PHRASE_LENGTH + 1)), /Слишком длинно/);
@@ -75,4 +75,32 @@ test('catchphrase is appended at the end sometimes', () => {
   assert.equal(withCatchphrase(game, 'Текст', () => 0), 'Текст\n\n💬 Ну это база');
   assert.equal(withCatchphrase(game, 'Текст', () => 0.99), 'Текст');
   assert.equal(withCatchphrase({}, 'Текст', () => 0), 'Текст');
+});
+
+test('names after a preposition are rejected: they would not be declined', () => {
+  assert.match(validatePhrase('gift2', 'Подарок для {receiver} готов?'), /без склонения: «для \{receiver\}»/);
+  assert.match(validatePhrase('wish2', 'У {name} нет пожелания'), /«У \{name\}»/);
+  assert.equal(validatePhrase('gift2', '{receiver} ждёт подарок до {date}'), null);
+  assert.equal(validatePhrase('gift2', 'Купи подарок к {date}'), null);
+});
+
+test('soft participants get harsh phrases much less often; soft mode from softNames or the organizer', async () => {
+  const { isSoft } = await import('../src/texts.js');
+  const game = {
+    softNames: ['Ира', 'Ирина'],
+    phrases: { draw: [{ id: 1, text: 'ЖЁСТКО', by: 'import', harsh: true }] },
+  };
+  const count = (soft) => {
+    let harsh = 0;
+    for (let i = 0; i < 1000; i++) if (pickPhrase(game, 'draw', {}, { random: () => (i + 0.5) / 1000, soft }) === 'ЖЁСТКО') harsh++;
+    return harsh;
+  };
+  assert.ok(count(false) > 150, 'normal: 1 of 5 phrases');
+  assert.ok(count(true) < 50 && count(true) > 0, 'soft: rare but possible');
+
+  assert.equal(isSoft(game, { name: 'Ирина' }), true);
+  assert.equal(isSoft(game, { name: 'Ирина Сергеевна (@ira)' }), true);
+  assert.equal(isSoft(game, { name: 'Сергей' }), false);
+  assert.equal(isSoft(game, { name: 'Ирина', soft: false }), false);
+  assert.equal(isSoft(game, { name: 'Сергей', soft: true }), true);
 });

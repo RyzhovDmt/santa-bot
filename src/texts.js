@@ -60,7 +60,7 @@ const GIFT_STAGES = [
     '🎄 Праздник всё ближе, {name}!',
   ],
   [
-    '🤔 {name}, подарок для {receiver} уже выбран?',
+    '🤔 {name}, подарок уже выбран? {receiver} ждёт.',
     '🛒 Корзина пуста, а праздник всё ближе.',
     '🎅 Санта интересуется, как там подарок.',
   ],
@@ -72,7 +72,7 @@ const GIFT_STAGES = [
   [
     '🚨 {name}, пора бежать за подарком!',
     '🏃 Бегом за подарком — {receiver} ждёт!',
-    '📣 Внимание! Подарок для {receiver} всё ещё не куплен!',
+    '📣 Внимание! Подарок всё ещё не куплен, а {receiver} ждёт!',
   ],
   [
     '😤 {count}-е напоминание, {name}. Подарок сам не появится.',
@@ -213,6 +213,20 @@ export function renderPhrase(template, vars) {
   return Object.entries(vars).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, value ?? ''), template);
 }
 
+// Names are substituted as-is (nominative): "для {receiver}" would read "для Ирина".
+const NAME_PLACEHOLDERS = ['name', 'receiver', 'santa'];
+const PREPOSITIONS = new Set(['для', 'у', 'к', 'ко', 'от', 'про', 'без', 'о', 'об', 'обо', 'с', 'со', 'за', 'над', 'под', 'перед', 'при', 'по']);
+
+function nameAfterPreposition(text) {
+  for (const p of NAME_PLACEHOLDERS) {
+    for (let i = text.indexOf(`{${p}}`); i !== -1; i = text.indexOf(`{${p}}`, i + 1)) {
+      const before = text.slice(0, i).trim().split(' ');
+      if (PREPOSITIONS.has(before[before.length - 1].toLowerCase())) return `${before[before.length - 1]} {${p}}`;
+    }
+  }
+  return null;
+}
+
 // Returns an error message or null.
 export function validatePhrase(key, text) {
   if (!text) return 'Фраза пустая.';
@@ -222,6 +236,10 @@ export function validatePhrase(key, text) {
   const unknown = placeholdersIn(text).filter((p) => !allowed.includes(p));
   if (unknown.length) {
     return `Здесь нельзя использовать: ${unknown.map((p) => `{${p}}`).join(', ')}.\nМожно: ${allowed.map((p) => `{${p}}`).join(', ')}.`;
+  }
+  const oblique = nameAfterPreposition(text);
+  if (oblique) {
+    return `Имя подставляется как есть, без склонения: «${oblique}» превратится в «для Ирина». Перестрой фразу, чтобы имя было в начале или после тире, например: «{receiver} ждёт подарок».`;
   }
   return null;
 }
@@ -243,31 +261,60 @@ function trimPunctuation(text) {
   return text.slice(0, end);
 }
 
-function pickFlavor(game, key, chance, random) {
+// Harsh phrases (mat, rough teasing) are marked `harsh: true`; for participants in soft mode
+// they are this many times less likely than usual, not excluded.
+const SOFT_HARSH_WEIGHT = 0.15;
+
+// Uniform pick when nothing is harsh or the recipient isn't soft.
+function weightedPick(items, soft, random) {
+  const weight = (item) => (soft && item.harsh ? SOFT_HARSH_WEIGHT : 1);
+  let r = random() * items.reduce((sum, item) => sum + weight(item), 0);
+  for (const item of items) {
+    r -= weight(item);
+    if (r < 0) return item;
+  }
+  return items[items.length - 1];
+}
+
+// opts: { random, soft } — a bare function is accepted as `random` for brevity in tests.
+const pickOptions = (opts = {}) => (typeof opts === 'function' ? { random: opts, soft: false } : { random: Math.random, soft: false, ...opts });
+
+function pickFlavor(game, key, chance, { random, soft }) {
   const list = customPhrases(game, key);
   if (!list.length || random() >= chance) return '';
-  return list[Math.floor(random() * list.length)].text;
+  return weightedPick(list, soft, random).text;
 }
 
 // Prepends a random interjection and/or address from the game's flavor lists: "Ну чё, братан! <text>".
-function decorate(game, text, random) {
+function decorate(game, text, opts) {
   const head = [
-    trimPunctuation(pickFlavor(game, 'interjections', INTERJECTION_CHANCE, random)),
-    trimPunctuation(pickFlavor(game, 'addresses', ADDRESS_CHANCE, random)),
+    trimPunctuation(pickFlavor(game, 'interjections', INTERJECTION_CHANCE, opts)),
+    trimPunctuation(pickFlavor(game, 'addresses', ADDRESS_CHANCE, opts)),
   ].filter(Boolean).join(', ');
   return head ? `${head[0].toUpperCase()}${head.slice(1)}! ${text}` : text;
 }
 
-export function pickPhrase(game, key, vars, random = Math.random) {
-  const pool = [...PHRASES[key].defaults, ...customPhrases(game, key).map((p) => p.text)];
-  return decorate(game, renderPhrase(pool[Math.floor(random() * pool.length)], vars), random);
+export function pickPhrase(game, key, vars, options) {
+  const opts = pickOptions(options);
+  const pool = [...PHRASES[key].defaults.map((text) => ({ text })), ...customPhrases(game, key)];
+  return decorate(game, renderPhrase(weightedPick(pool, opts.soft, opts.random).text, vars), opts);
 }
 
 // Appends a random catchphrase to a whole notification (sometimes, if the game has any).
-export function withCatchphrase(game, text, random = Math.random) {
-  const phrase = pickFlavor(game, 'catchphrases', CATCHPHRASE_CHANCE, random);
+export function withCatchphrase(game, text, options) {
+  const phrase = pickFlavor(game, 'catchphrases', CATCHPHRASE_CHANCE, pickOptions(options));
   return phrase ? `${text}\n\n💬 ${phrase}` : text;
 }
 
 // Name without "(@username)" reads better inside a sentence.
 export const shortName = (participant) => participant.name.split(' (@')[0];
+
+// Soft mode: set by the organizer per participant, or by first name from game.softNames (e.g. from a phrase pack).
+export function isSoft(game, participant) {
+  if (typeof participant.soft === 'boolean') return participant.soft;
+  const name = shortName(participant).toLowerCase();
+  return (game.softNames ?? []).some((n) => name === n.toLowerCase() || name.startsWith(`${n.toLowerCase()} `));
+}
+
+// Options for picking phrases addressed to a participant.
+export const toneFor = (game, participant) => ({ soft: isSoft(game, participant) });

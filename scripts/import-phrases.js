@@ -1,9 +1,12 @@
 // Imports a phrase pack into a game in the remote D1 database.
 //
-//   node scripts/import-phrases.js <pack.json> <GAME_CODE> [--dry-run]
+//   node scripts/import-phrases.js <pack.json> <GAME_CODE> [--dry-run] [--replace]
 //
-// pack.json: { "phrases": { "<phrase key>": ["text", ...], ... } } — keys as in src/texts.js
-// (join, draw, wish1..wish7, lastDay, gift1..gift7, reveal, interjections, addresses).
+// --replace: first removes previously imported phrases (not the ones participants added) for keys in the pack.
+//
+// pack.json: { "phrases": { "<phrase key>": ["text", { "text": "...", "harsh": true }, ...] }, "softNames": ["Ира"] }
+// Keys as in src/texts.js (join, draw, wish1..wish7, lastDay, gift1..gift7, reveal, interjections, addresses, catchphrases).
+// harsh: mat or rough teasing — much rarer for participants in soft mode. softNames: first names that start in soft mode.
 // Keep packs with private content outside the repository.
 // Phrases are validated like in the bot, duplicates are skipped, the per-key limit is respected.
 // Imported phrases have no author: only the organizer can delete them.
@@ -15,12 +18,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MAX_CUSTOM_PHRASES, PHRASES, validatePhrase } from '../src/texts.js';
 
-const [packPath, code, flag] = process.argv.slice(2);
+const [packPath, code, ...flags] = process.argv.slice(2);
 if (!packPath || !code) {
-  console.error('Usage: node scripts/import-phrases.js <pack.json> <GAME_CODE> [--dry-run]');
+  console.error('Usage: node scripts/import-phrases.js <pack.json> <GAME_CODE> [--dry-run] [--replace]');
   process.exit(1);
 }
-const dryRun = flag === '--dry-run';
+const dryRun = flags.includes('--dry-run');
+const replace = flags.includes('--replace');
 
 // Wrangler's JS entry is run with node directly: no shell, so SQL arguments aren't split on spaces.
 const WRANGLER = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
@@ -33,27 +37,34 @@ function loadGame() {
   return JSON.parse(row.data);
 }
 
-const pack = JSON.parse(readFileSync(packPath, 'utf8')).phrases;
+const packFile = JSON.parse(readFileSync(packPath, 'utf8'));
+const pack = packFile.phrases;
 const game = loadGame();
 game.phrases ??= {};
 const report = [];
+if (packFile.softNames) {
+  game.softNames = packFile.softNames;
+  report.push(`✔ softNames: ${packFile.softNames.join(', ')}`);
+}
 
 for (const [key, texts] of Object.entries(pack)) {
   if (!PHRASES[key]) {
     report.push(`✘ ${key}: unknown key, skipped`);
     continue;
   }
+  if (replace) game.phrases[key] = (game.phrases[key] ?? []).filter((p) => p.by !== 'import');
   const list = (game.phrases[key] ??= []);
   let added = 0;
-  for (const raw of texts) {
-    const text = raw.trim();
+  for (const entry of texts) {
+    const text = (typeof entry === 'string' ? entry : entry.text).trim();
+    const harsh = typeof entry === 'object' && entry.harsh === true;
     const error = validatePhrase(key, text);
     if (error) report.push(`✘ ${key}: "${text}" — ${error.split('\n')[0]}`);
     else if (list.some((p) => p.text === text)) continue;
     else if (list.length >= MAX_CUSTOM_PHRASES) report.push(`✘ ${key}: limit ${MAX_CUSTOM_PHRASES} reached, "${text}" skipped`);
     else {
       game.nextPhraseId = (game.nextPhraseId ?? 0) + 1;
-      list.push({ id: game.nextPhraseId, text, by: 'import' });
+      list.push({ id: game.nextPhraseId, text, by: 'import', ...(harsh && { harsh: true }) });
       added++;
     }
   }

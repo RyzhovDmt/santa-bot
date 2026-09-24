@@ -3,7 +3,9 @@ import { cycles, draw, santaOf } from '../draw.js';
 import {
   BTN, HELP, STATUS_TITLE, button, cancelKeyboard, displayName, gameDetails, giftDetails, inline, mainMenu,
 } from '../ui.js';
-import { pickPhrase, shortName, withCatchphrase } from '../texts.js';
+import {
+  isSoft, pickPhrase, shortName, toneFor, withCatchphrase,
+} from '../texts.js';
 
 const MIN_PLAYERS = 3;
 // Draw sends one message per player; the free plan allows 50 subrequests per invocation.
@@ -50,6 +52,7 @@ function infoKeyboard(game, userId) {
     }
     if (game.status === 'open') rows.push([button('🎲 Провести жеребьёвку', 'draw', c)]);
     if (game.status === 'drawn') rows.push([button('🎉 Раскрыть Сант', 'reveal.ask', c)]);
+    if (game.status !== 'revealed') rows.push([button('🙊 Мягкий тон', 'soft.menu', c)]);
     rows.push([button('🗑 Удалить игру', 'cancel.ask', c)]);
   } else if (game.status === 'open') {
     rows.push([button('🚪 Выйти из игры', 'leave', c)]);
@@ -141,9 +144,10 @@ async function joinGame(app, ctx, code) {
   store.setCurrentGame(userId, code);
   store.setMode(userId, null);
   await store.save();
-  const greeting = pickPhrase(game, 'join', { name: shortName(participant), title: game.title });
+  const tone = toneFor(game, participant);
+  const greeting = pickPhrase(game, 'join', { name: shortName(participant), title: game.title }, tone);
   return ctx.reply(
-    withCatchphrase(game, `${greeting}\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`),
+    withCatchphrase(game, `${greeting}\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`, tone),
     mainMenu(game),
   );
 }
@@ -233,8 +237,9 @@ async function applySetting(app, ctx, game, userId, field, raw) {
 function drawMessage(game, giverId, receiverId) {
   const receiver = game.participants[receiverId];
   const details = giftDetails(game);
+  const tone = toneFor(game, game.participants[giverId]);
   return withCatchphrase(game, [
-    pickPhrase(game, 'draw', { name: shortName(game.participants[giverId]), title: game.title, receiver: receiver.name }),
+    pickPhrase(game, 'draw', { name: shortName(game.participants[giverId]), title: game.title, receiver: receiver.name }, tone),
     '',
     `Игра «${game.title}»`,
     '',
@@ -245,7 +250,7 @@ function drawMessage(game, giverId, receiverId) {
     '',
     `Спросить что-то у получателя анонимно: «${BTN.whom}» → «✉️ Написать получателю».`,
     'Никому не говори — это секрет 🤫',
-  ].join('\n'));
+  ].join('\n'), tone);
 }
 
 async function runDraw(app, ctx, game) {
@@ -301,12 +306,12 @@ async function reveal(app, ctx, game) {
   await app.broadcast(Object.keys(game.participants).map((to) => ({
     to,
     text: withCatchphrase(game, [
-      pickPhrase(game, 'reveal', { name: shortName(game.participants[to]), title: game.title, santa: name(santaOf(game.pairs, to)) }),
+      pickPhrase(game, 'reveal', { name: shortName(game.participants[to]), title: game.title, santa: name(santaOf(game.pairs, to)) }, toneFor(game, game.participants[to])),
       '',
       `Тебе дарит: ${name(santaOf(game.pairs, to))}`,
       '',
       `Кто кому дарит:\n${chains}`,
-    ].join('\n')),
+    ].join('\n'), toneFor(game, game.participants[to])),
     extra: mainMenu(game),
   })));
 }
@@ -337,8 +342,36 @@ async function leaveGame(app, ctx, game, userId) {
   return ctx.reply(`Ты больше не участвуешь в игре «${game.title}».`, mainMenu());
 }
 
+// Organizer-only: participants in soft mode get harsh phrases much less often.
+function softView(game) {
+  const rows = Object.entries(game.participants).map(([id, p]) => [
+    button(`${isSoft(game, p) ? '🙊' : '😈'} ${p.name}`, 'soft.toggle', game.code, id),
+  ]);
+  return {
+    text: '🙊 Мягкий тон\n\nУчастникам с 🙊 жёсткие фразы (мат, грубые подколы) выпадают намного реже. Нажми на участника, чтобы переключить.',
+    keyboard: inline(rows),
+  };
+}
+
+async function toggleSoft(app, ctx, game, participantId) {
+  const p = game.participants[participantId];
+  if (!p) return;
+  p.soft = !isSoft(game, p);
+  await app.store.save();
+  const view = softView(game);
+  return ctx.editMessageText(view.text, view.keyboard).catch(() => ctx.reply(view.text, view.keyboard));
+}
+
 export function register(app) {
   const { bot, store } = app;
+
+  app.onAction('soft.menu', ownerOnly((ctx, game) => {
+    const view = softView(game);
+    return ctx.reply(view.text, view.keyboard);
+  }));
+  app.onAction('soft.toggle', (ctx, game, userId, participantId) => (game.ownerId === userId
+    ? toggleSoft(app, ctx, game, participantId)
+    : ctx.reply('Это может сделать только организатор игры.')));
 
   bot.command('start', (ctx) => {
     const code = ctx.match.trim().toUpperCase();

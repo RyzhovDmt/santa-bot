@@ -1,6 +1,6 @@
 import { daysBetween, formatDate, hourIn, todayIn } from './dates.js';
 import { loadActiveGames, markReminder } from './storage.js';
-import { pickPhrase, shortName, stageKey, withCatchphrase } from './texts.js';
+import { pickPhrase, shortName, stageKey, toneFor, withCatchphrase } from './texts.js';
 import { button, daysText, inline } from './ui.js';
 
 const WISH_EVERY_DAYS = 2;
@@ -44,11 +44,11 @@ export function reminderMessages(game, reminder) {
       text: withCatchphrase(game, [
         pickPhrase(game, lastDay ? 'lastDay' : stageKey('wish', reminderNumber(game, 'wish', to)), {
           name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date, count: reminderNumber(game, 'wish', to),
-        }),
+        }, toneFor(game, p)),
         '',
         info,
         'Напиши пожелание и отметь его готовым.',
-      ].join('\n')),
+      ].join('\n'), toneFor(game, p)),
       extra: inline([[button('✏️ Моё пожелание', 'wish.view', c)]]),
     }));
   }
@@ -70,12 +70,12 @@ export function reminderMessages(game, reminder) {
       pickPhrase(game, stageKey('gift', reminderNumber(game, 'gift', to)), {
         name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date,
         receiver: game.participants[game.pairs[to]].name, count: reminderNumber(game, 'gift', to),
-      }),
+      }, toneFor(game, p)),
       '',
       `До вручения подарков в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${date}).`,
       `Ты даришь: ${game.participants[game.pairs[to]].name}`,
       ...(game.budget ? [`💰 Бюджет: ${game.budget}`] : []),
-    ].join('\n')),
+    ].join('\n'), toneFor(game, p)),
     extra: inline([[button('🛍 Подарок куплен', 'gift.bought', c), button('🎁 Кому я дарю', 'whom.view', c)]]),
   }));
 }

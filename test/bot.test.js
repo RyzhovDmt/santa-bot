@@ -220,7 +220,7 @@ test('participants add phrases, only author or organizer can delete, phrases app
 
   await press('B', `phr.add:${code}:draw`);
   assert.match((await say('B', 'Тебе дарит {santa}'))[0].text, /нельзя использовать/);
-  const added = await say('B', 'Для {receiver} — от всего сердца!');
+  const added = await say('B', '{receiver}, это от всего сердца!');
   assert.match(added[0].text, /Фраза добавлена/);
 
   let game = loadGame();
@@ -229,7 +229,7 @@ test('participants add phrases, only author or organizer can delete, phrases app
 
   // Another participant sees the phrase but gets no delete button for it.
   const cView = await press('C', `phr.key:${code}:draw`);
-  assert.match(cView[0].text, /1\. Для \{receiver\} — от всего сердца!/);
+  assert.match(cView[0].text, /1\. \{receiver\}, это от всего сердца!/);
   assert.ok(!buttons(cView[0]).includes(`phr.del:${code}:draw.${phraseId}`));
   assert.match((await press('C', `phr.del:${code}:draw.${phraseId}`))[0].text, /только свою/);
   // The author isn't shown to anyone.
@@ -241,7 +241,7 @@ test('participants add phrases, only author or organizer can delete, phrases app
   try {
     const out = await press('A', `draw:${code}`);
     const pairMessage = out.find((m) => m.text.includes('Ты даришь подарок'));
-    assert.match(pairMessage.text, /^Для .+ — от всего сердца!/);
+    assert.match(pairMessage.text, /^\S+, это от всего сердца!/);
   } finally {
     Math.random = random;
   }
@@ -258,4 +258,14 @@ test('an update stays within the free plan subrequest limit', async () => {
   sent = [];
   await press('A', `draw:${code}`);
   assert.ok(env.DB.calls + sent.length < 50, `${env.DB.calls} DB calls + ${sent.length} API calls`);
+});
+
+test('only the organizer toggles soft mode', async () => {
+  const code = await setupGame();
+  assert.match((await press('B', `soft.menu:${code}`))[0].text, /только организатор/);
+  const menu = await press('A', `soft.menu:${code}`);
+  assert.ok(buttons(menu[0]).includes(`soft.toggle:${code}:${NAME_TO_ID.C}`));
+  await press('A', `soft.toggle:${code}:${NAME_TO_ID.C}`);
+  assert.equal(loadGame().participants[NAME_TO_ID.C].soft, true);
+  assert.match((await press('B', `soft.toggle:${code}:${NAME_TO_ID.C}`))[0].text, /только организатор/);
 });
