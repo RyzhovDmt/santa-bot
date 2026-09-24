@@ -30,11 +30,19 @@ const replace = flags.includes('--replace');
 const WRANGLER = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js', import.meta.url));
 const wrangler = (args) => execFileSync(process.execPath, [WRANGLER, ...args], { encoding: 'utf8' });
 
+const sqlCode = code.replaceAll("'", "''");
+
+function query(sql) {
+  const out = wrangler(['d1', 'execute', 'santa-bot', '--remote', '--json', '--command', sql]);
+  return JSON.parse(out.slice(out.indexOf('[')))[0].results;
+}
+
 function loadGame() {
-  const out = wrangler(['d1', 'execute', 'santa-bot', '--remote', '--json', '--command', `SELECT data FROM games WHERE code = '${code.replaceAll("'", "''")}'`]);
-  const row = JSON.parse(out.slice(out.indexOf('[')))[0].results[0];
+  const [row] = query(`SELECT data FROM games WHERE code = '${sqlCode}'`);
   if (!row) throw new Error(`Game ${code} not found`);
-  return JSON.parse(row.data);
+  const game = JSON.parse(row.data);
+  game.phrases = Object.fromEntries(query(`SELECT key, data FROM game_phrases WHERE code = '${sqlCode}'`).map((r) => [r.key, JSON.parse(r.data)]));
+  return game;
 }
 
 const packFile = JSON.parse(readFileSync(packPath, 'utf8'));
@@ -77,10 +85,14 @@ if (dryRun) {
   process.exit(0);
 }
 
-// The game document is replaced as a whole; the bot writes it the same way.
+// One statement per phrase list (game_phrases row): D1 rejects SQL statements over 100 KB.
 const sqlFile = join(tmpdir(), `santa-import-${code}.sql`);
-const data = JSON.stringify(game).replaceAll("'", "''");
-writeFileSync(sqlFile, `UPDATE games SET data = '${data}', updated_at = '${new Date().toISOString()}' WHERE code = '${code}';\n`);
+const quote = (value) => `'${JSON.stringify(value).replaceAll("'", "''")}'`;
+const statements = [
+  `UPDATE games SET data = json_set(data, '$.nextPhraseId', ${game.nextPhraseId ?? 0}${game.softNames ? `, '$.softNames', json(${quote(game.softNames)})` : ''}), updated_at = '${new Date().toISOString()}' WHERE code = '${sqlCode}';`,
+  ...Object.entries(game.phrases).map(([key, list]) => `INSERT INTO game_phrases (code, key, data) VALUES ('${sqlCode}', '${key}', ${quote(list)}) ON CONFLICT (code, key) DO UPDATE SET data = excluded.data;`),
+];
+writeFileSync(sqlFile, `${statements.join('\n')}\n`);
 try {
   wrangler(['d1', 'execute', 'santa-bot', '--remote', '--file', sqlFile, '--yes']);
   console.log(`\nImported into game ${code}.`);

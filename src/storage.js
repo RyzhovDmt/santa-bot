@@ -4,6 +4,22 @@
 
 const newUser = () => ({ game: null, mode: null });
 
+// Phrase lists are stored in game_phrases, one row per list, and attached as game.phrases in memory.
+function attachPhrases(games, rows) {
+  for (const row of rows) {
+    const game = games.get(row.code);
+    if (!game) continue;
+    game.phrases ??= {};
+    game.phrases[row.key] = JSON.parse(row.data);
+  }
+}
+
+// The game document without phrase lists — what goes into games.data.
+function gameDocument(game) {
+  const { phrases, ...rest } = game;
+  return JSON.stringify(rest);
+}
+
 export class Store {
   constructor(db) {
     this.db = db;
@@ -17,14 +33,16 @@ export class Store {
     const missing = [...new Set(codes)].filter((code) => code && !this.games.has(code));
     if (!missing.length) return;
     const placeholders = missing.map(() => '?').join(', ');
-    const { results } = await this.db
-      .prepare(`SELECT code, data FROM games WHERE code IN (${placeholders})`)
-      .bind(...missing)
-      .all();
-    for (const row of results) {
+    const [games, phrases] = await this.db.batch([
+      this.db.prepare(`SELECT code, data FROM games WHERE code IN (${placeholders})`).bind(...missing),
+      this.db.prepare(`SELECT code, key, data FROM game_phrases WHERE code IN (${placeholders})`).bind(...missing),
+    ]);
+    for (const row of games.results) {
       this.games.set(row.code, JSON.parse(row.data));
       this.snapshots.set(`g:${row.code}`, row.data);
     }
+    for (const row of phrases.results) this.snapshots.set(`p:${row.code}:${row.key}`, row.data);
+    attachPhrases(this.games, phrases.results);
   }
 
   // Loads the user, their current game, the game their pending input refers to and any extra games.
@@ -44,14 +62,24 @@ export class Store {
     const now = new Date().toISOString();
 
     for (const [code, game] of this.games) {
-      const data = JSON.stringify(game);
+      const data = gameDocument(game);
       const key = `g:${code}`;
-      if (this.snapshots.get(key) === data) continue;
-      // New games use a plain INSERT: a code collision fails loudly instead of overwriting another game.
-      statements.push(this.snapshots.has(key)
-        ? this.db.prepare('UPDATE games SET status = ?, data = ?, updated_at = ? WHERE code = ?').bind(game.status, data, now, code)
-        : this.db.prepare('INSERT INTO games (code, status, data, updated_at) VALUES (?, ?, ?, ?)').bind(code, game.status, data, now));
-      this.snapshots.set(key, data);
+      if (this.snapshots.get(key) !== data) {
+        // New games use a plain INSERT: a code collision fails loudly instead of overwriting another game.
+        statements.push(this.snapshots.has(key)
+          ? this.db.prepare('UPDATE games SET status = ?, data = ?, updated_at = ? WHERE code = ?').bind(game.status, data, now, code)
+          : this.db.prepare('INSERT INTO games (code, status, data, updated_at) VALUES (?, ?, ?, ?)').bind(code, game.status, data, now));
+        this.snapshots.set(key, data);
+      }
+      for (const [phraseKey, list] of Object.entries(game.phrases ?? {})) {
+        const json = JSON.stringify(list);
+        const snapshot = `p:${code}:${phraseKey}`;
+        if (this.snapshots.get(snapshot) === json) continue;
+        statements.push(this.db
+          .prepare('INSERT INTO game_phrases (code, key, data) VALUES (?, ?, ?) ON CONFLICT (code, key) DO UPDATE SET data = excluded.data')
+          .bind(code, phraseKey, json));
+        this.snapshots.set(snapshot, json);
+      }
     }
 
     for (const [userId, user] of this.users) {
@@ -112,6 +140,7 @@ export class Store {
       this.db.prepare("UPDATE users SET mode = NULL WHERE json_extract(mode, '$.code') = ?").bind(code),
       this.db.prepare('DELETE FROM reminders WHERE code = ?').bind(code),
       this.db.prepare('DELETE FROM reminder_counts WHERE code = ?').bind(code),
+      this.db.prepare('DELETE FROM game_phrases WHERE code = ?').bind(code),
       this.db.prepare('DELETE FROM games WHERE code = ?').bind(code),
     );
   }
@@ -126,10 +155,11 @@ export class Store {
 // Games that can still have reminders, with their reminder log attached as game.reminders
 // and per-participant reminder numbers as game.reminderCounts[kind][userId].
 export async function loadActiveGames(db) {
-  const [games, reminders, counts] = await db.batch([
+  const [games, reminders, counts, phrases] = await db.batch([
     db.prepare("SELECT data FROM games WHERE status IN ('open', 'drawn')"),
     db.prepare('SELECT code, kind, sent FROM reminders'),
     db.prepare('SELECT code, user_id, kind, count FROM reminder_counts'),
+    db.prepare("SELECT p.code, p.key, p.data FROM game_phrases p JOIN games g ON g.code = p.code WHERE g.status IN ('open', 'drawn')"),
   ]);
   const countsByGame = {};
   for (const row of counts.results) {
@@ -142,12 +172,14 @@ export async function loadActiveGames(db) {
     sent[row.code] ??= {};
     sent[row.code][row.kind] = row.sent;
   }
-  return games.results.map((row) => {
+  const loaded = new Map(games.results.map((row) => {
     const game = JSON.parse(row.data);
     game.reminders = sent[game.code] ?? {};
     game.reminderCounts = countsByGame[game.code] ?? {};
-    return game;
-  });
+    return [game.code, game];
+  }));
+  attachPhrases(loaded, phrases.results);
+  return [...loaded.values()];
 }
 
 // Marks the reminder as sent today and bumps reminder numbers of its recipients — one batch, one subrequest.

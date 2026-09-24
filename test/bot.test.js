@@ -62,7 +62,20 @@ const dateIn = (days) => {
   return `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
 };
 
-const loadGame = () => JSON.parse(env.DB.db.prepare('SELECT data FROM games').get().data);
+// The game as the bot sees it: document from games + phrase lists from game_phrases.
+function loadGame() {
+  const game = JSON.parse(env.DB.db.prepare('SELECT data FROM games').get().data);
+  const rows = env.DB.db.prepare('SELECT key, data FROM game_phrases WHERE code = ?').all(game.code);
+  if (rows.length) game.phrases = Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.data)]));
+  return game;
+}
+
+const setPhrases = (code, phrases) => {
+  for (const [key, list] of Object.entries(phrases)) {
+    env.DB.db.prepare('INSERT INTO game_phrases (code, key, data) VALUES (?, ?, ?) ON CONFLICT (code, key) DO UPDATE SET data = excluded.data')
+      .run(code, key, JSON.stringify(list));
+  }
+};
 const buttons = (m) => (m.payload.reply_markup?.inline_keyboard ?? []).flat().map((b) => b.callback_data);
 
 async function setupGame() {
@@ -275,9 +288,7 @@ test('only the organizer toggles soft mode', async () => {
 
 test('long phrase lists are paginated and stay within the message limit', async () => {
   const code = await setupGame();
-  const game = loadGame();
-  game.phrases = { gift3: Array.from({ length: 35 }, (_, i) => ({ id: i + 1, text: `${'x'.repeat(280)} ${i + 1}`, by: 'import' })) };
-  env.DB.db.prepare('UPDATE games SET data = ? WHERE code = ?').run(JSON.stringify(game), code);
+  setPhrases(code, { gift3: Array.from({ length: 35 }, (_, i) => ({ id: i + 1, text: `${'x'.repeat(280)} ${i + 1}`, by: 'import' })) });
 
   const first = await press('A', `phr.key:${code}:gift3`);
   assert.match(first[0].text, /Добавленные в игре \(35\), стр\. 1 из 4/);
@@ -294,9 +305,7 @@ test('long phrase lists are paginated and stay within the message limit', async 
 
 test('replies to participant actions carry a phrase from the game pool', async () => {
   const code = await setupGame();
-  const game = loadGame();
-  game.phrases = { idle: [{ id: 1, text: 'Хз, чел', by: 'import' }], denied: [{ id: 2, text: 'Руки прочь', by: 'import' }] };
-  env.DB.db.prepare('UPDATE games SET data = ? WHERE code = ?').run(JSON.stringify(game), code);
+  setPhrases(code, { idle: [{ id: 1, text: 'Хз, чел', by: 'import' }], denied: [{ id: 2, text: 'Руки прочь', by: 'import' }] });
   const random = Math.random;
   Math.random = () => 0.999; // no flavor words, the last phrase in the pool = the game's own
   try {
@@ -305,4 +314,15 @@ test('replies to participant actions carry a phrase from the game pool', async (
   } finally {
     Math.random = random;
   }
+});
+
+test('phrase lists are stored apart from the game document', async () => {
+  const code = await setupGame();
+  await press('B', `phr.add:${code}:draw`);
+  await say('B', 'Своя фраза');
+  const data = JSON.parse(env.DB.db.prepare('SELECT data FROM games WHERE code = ?').get(code).data);
+  assert.equal(data.phrases, undefined);
+  assert.equal(JSON.parse(env.DB.db.prepare("SELECT data FROM game_phrases WHERE code = ? AND key = 'draw'").get(code).data)[0].text, 'Своя фраза');
+  await press('A', `cancel.yes:${code}`);
+  assert.equal(env.DB.db.prepare('SELECT count(*) AS n FROM game_phrases').get().n, 0);
 });
