@@ -192,6 +192,46 @@ test('cron sends due reminders once a day and only after the reminder hour', asy
   assert.equal(sent.length, 0);
 });
 
+test('participants add phrases, only author or organizer can delete, phrases appear in notifications', async () => {
+  const code = await setupGame();
+
+  const menu = await press('B', `phr.menu:${code}`);
+  assert.ok(buttons(menu[0]).includes(`phr.key:${code}:draw`));
+
+  await press('B', `phr.add:${code}:draw`);
+  assert.match((await say('B', 'Тебе дарит {santa}'))[0].text, /нельзя использовать/);
+  const added = await say('B', 'Для {receiver} — от всего сердца!');
+  assert.match(added[0].text, /Фраза добавлена/);
+
+  let game = loadGame();
+  const phraseId = game.phrases.draw[0].id;
+  assert.equal(game.phrases.draw[0].by, NAME_TO_ID.B);
+
+  // Another participant sees the phrase but gets no delete button for it.
+  const cView = await press('C', `phr.key:${code}:draw`);
+  assert.match(cView[0].text, /1\. Для \{receiver\} — от всего сердца!/);
+  assert.ok(!buttons(cView[0]).includes(`phr.del:${code}:draw.${phraseId}`));
+  assert.match((await press('C', `phr.del:${code}:draw.${phraseId}`))[0].text, /только свою/);
+  // The author isn't shown to anyone.
+  assert.doesNotMatch(cView[0].text, /Борис/);
+
+  // With only the custom phrase possible, the draw message starts with it.
+  const random = Math.random;
+  Math.random = () => 0.999;
+  try {
+    const out = await press('A', `draw:${code}`);
+    const pairMessage = out.find((m) => m.text.includes('Ты даришь подарок'));
+    assert.match(pairMessage.text, /^Для .+ — от всего сердца!/);
+  } finally {
+    Math.random = random;
+  }
+
+  // Organizer can delete any phrase.
+  await press('A', `phr.del:${code}:draw.${phraseId}`);
+  game = loadGame();
+  assert.equal(game.phrases.draw.length, 0);
+});
+
 test('an update stays within the free plan subrequest limit', async () => {
   const code = await setupGame();
   env.DB.calls = 0;

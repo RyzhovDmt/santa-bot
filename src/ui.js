@@ -40,8 +40,8 @@ export function mainMenu(game) {
   return replyKeyboard([[BTN.whom, BTN.wish], [BTN.toSanta, BTN.players], [BTN.info]]);
 }
 
-// Callback data is "<action>:<gameCode>" (Telegram allows up to 64 bytes).
-export const button = (text, action, code) => ({ text, callback_data: code ? `${action}:${code}` : action });
+// Callback data is "<action>:<gameCode>[:<arg>]" (Telegram allows up to 64 bytes).
+export const button = (text, action, code, arg) => ({ text, callback_data: [action, code, arg].filter(Boolean).join(':') });
 
 export const inline = (rows) => ({ reply_markup: { inline_keyboard: rows } });
 

@@ -3,6 +3,7 @@ import { cycles, draw, santaOf } from '../draw.js';
 import {
   BTN, HELP, STATUS_TITLE, button, cancelKeyboard, displayName, gameDetails, giftDetails, inline, mainMenu,
 } from '../ui.js';
+import { pickPhrase, shortName } from '../texts.js';
 
 const MIN_PLAYERS = 3;
 // Draw sends one message per player; the free plan allows 50 subrequests per invocation.
@@ -53,6 +54,7 @@ function infoKeyboard(game, userId) {
   } else if (game.status === 'open') {
     rows.push([button('🚪 Выйти из игры', 'leave', c)]);
   }
+  if (game.status !== 'revealed') rows.push([button('💬 Фразы уведомлений', 'phr.menu', c)]);
   return rows.length ? inline(rows) : undefined;
 }
 
@@ -134,12 +136,14 @@ async function joinGame(app, ctx, code) {
     return ctx.reply(`Ты уже в игре «${current.title}», где жеребьёвка ещё не прошла. Сначала выйди из неё: «${BTN.info}» → «Выйти из игры».`);
   }
 
-  game.participants[userId] = newParticipant(ctx.from);
+  const participant = newParticipant(ctx.from);
+  game.participants[userId] = participant;
   store.setCurrentGame(userId, code);
   store.setMode(userId, null);
   await store.save();
+  const greeting = pickPhrase(game, 'join', { name: shortName(participant), title: game.title });
   return ctx.reply(
-    `Ты в игре «${game.title}»! 🎄\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`,
+    `${greeting}\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`,
     mainMenu(game),
   );
 }
@@ -226,11 +230,13 @@ async function applySetting(app, ctx, game, userId, field, raw) {
   return ctx.reply(`Сохранено ✅\n\n${gameDetails(game)}`, infoKeyboard(game, userId));
 }
 
-function drawMessage(game, receiverId) {
+function drawMessage(game, giverId, receiverId) {
   const receiver = game.participants[receiverId];
   const details = giftDetails(game);
   return [
-    `🎅 Жеребьёвка в игре «${game.title}» проведена!`,
+    pickPhrase(game, 'draw', { name: shortName(game.participants[giverId]), title: game.title, receiver: receiver.name }),
+    '',
+    `Игра «${game.title}»`,
     '',
     `Ты даришь подарок: ${receiver.name}`,
     '',
@@ -262,7 +268,7 @@ async function runDraw(app, ctx, game) {
 
   const failed = await app.broadcast(Object.entries(game.pairs).map(([giver, receiver]) => ({
     to: giver,
-    text: drawMessage(game, receiver),
+    text: drawMessage(game, giver, receiver),
     extra: mainMenu(game),
   })));
 
@@ -294,7 +300,13 @@ async function reveal(app, ctx, game) {
   const chains = cycles(game.pairs).map((cycle) => [...cycle, cycle[0]].map(name).join(' → ')).join('\n\n');
   await app.broadcast(Object.keys(game.participants).map((to) => ({
     to,
-    text: `🎉 Тайные Санты игры «${game.title}» раскрыты!\n\nТебе дарит: ${name(santaOf(game.pairs, to))}\n\nКто кому дарит:\n${chains}`,
+    text: [
+      pickPhrase(game, 'reveal', { name: shortName(game.participants[to]), title: game.title, santa: name(santaOf(game.pairs, to)) }),
+      '',
+      `Тебе дарит: ${name(santaOf(game.pairs, to))}`,
+      '',
+      `Кто кому дарит:\n${chains}`,
+    ].join('\n'),
     extra: mainMenu(game),
   })));
 }

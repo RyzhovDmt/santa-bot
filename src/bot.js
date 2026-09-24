@@ -2,6 +2,7 @@ import { Bot } from 'grammy';
 import { todayIn } from './dates.js';
 import * as chat from './handlers/chat.js';
 import * as game from './handlers/game.js';
+import * as phrases from './handlers/phrases.js';
 import * as wish from './handlers/wish.js';
 import { Store } from './storage.js';
 import { BTN, BUTTON_LABELS, HELP, mainMenu } from './ui.js';
@@ -61,7 +62,7 @@ export function createApp(env, { apiTransformer } = {}) {
     userId: (ctx) => String(ctx.from.id),
     inviteLink: (code) => `https://t.me/${bot.botInfo.username}?start=${code}`,
 
-    // Inline button handler; callback data is "<action>:<gameCode>".
+    // Inline button handler; callback data is "<action>:<gameCode>[:<arg>]".
     onAction(name, handler) {
       actions.set(name, handler);
     },
@@ -120,10 +121,11 @@ export function createApp(env, { apiTransformer } = {}) {
   game.register(app);
   wish.register(app);
   chat.register(app);
+  phrases.register(app);
 
   bot.on('callback_query:data', async (ctx) => {
     await ctx.answerCallbackQuery().catch(() => {});
-    const [action, code] = ctx.callbackQuery.data.split(':');
+    const [action, code, arg] = ctx.callbackQuery.data.split(':');
     const userId = app.userId(ctx);
 
     if (action === 'dismiss' || action === 'mode.cancel') {
@@ -138,10 +140,10 @@ export function createApp(env, { apiTransformer } = {}) {
     if (!handler) return;
     const current = code && store.getGame(code);
     if (!current || !current.participants[userId]) return ctx.reply('Эта игра больше недоступна.');
-    return handler(ctx, current, userId);
+    return handler(ctx, current, userId, arg);
   });
 
-  const inputs = { ...game.inputs, ...wish.inputs, ...chat.inputs };
+  const inputs = { ...game.inputs, ...wish.inputs, ...chat.inputs, ...phrases.inputs };
 
   bot.on('message', async (ctx) => {
     const userId = app.userId(ctx);

@@ -1,5 +1,6 @@
 import { daysBetween, formatDate, hourIn, todayIn } from './dates.js';
 import { loadActiveGames, markReminder } from './storage.js';
+import { pickPhrase, shortName, stageKey } from './texts.js';
 import { button, daysText, inline } from './ui.js';
 
 const WISH_EVERY_DAYS = 2;
@@ -30,12 +31,19 @@ export function reminderMessages(game, reminder) {
   const entries = Object.entries(game.participants);
 
   if (reminder.kind === 'wish') {
-    const text = reminder.daysLeft === 0
-      ? `⏰ Сегодня последний день, чтобы заполнить пожелание в игре «${game.title}».`
-      : `⏰ До дедлайна пожеланий в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${formatDate(game.wishDeadline)}).`;
-    return entries.filter(([, p]) => !p.wishReady).map(([to]) => ({
+    const date = formatDate(game.wishDeadline);
+    const lastDay = reminder.daysLeft === 0;
+    const info = lastDay
+      ? `Сегодня последний день дедлайна пожеланий в игре «${game.title}» (${date}).`
+      : `До дедлайна пожеланий в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${date}).`;
+    return entries.filter(([, p]) => !p.wishReady).map(([to, p]) => ({
       to,
-      text: `${text}\nНапиши, что хочешь получить, и отметь пожелание готовым — так Санта будет знать, что тебе подарить.`,
+      text: [
+        pickPhrase(game, stageKey('wish', reminder.daysLeft), { name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date }),
+        '',
+        info,
+        'Напиши пожелание и отметь его готовым.',
+      ].join('\n'),
       extra: inline([[button('✏️ Моё пожелание', 'wish.view', c)]]),
     }));
   }
@@ -50,10 +58,13 @@ export function reminderMessages(game, reminder) {
   }
 
   // kind === 'gift'
-  return entries.filter(([, p]) => !p.giftBought).map(([to]) => ({
+  const date = formatDate(game.giftDate);
+  return entries.filter(([, p]) => !p.giftBought).map(([to, p]) => ({
     to,
     text: [
-      `🎁 До вручения подарков в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${formatDate(game.giftDate)}).`,
+      pickPhrase(game, stageKey('gift', reminder.daysLeft), { name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date, receiver: game.participants[game.pairs[to]].name }),
+      '',
+      `До вручения подарков в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${date}).`,
       `Ты даришь: ${game.participants[game.pairs[to]].name}`,
       ...(game.budget ? [`💰 Бюджет: ${game.budget}`] : []),
     ].join('\n'),

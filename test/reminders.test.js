@@ -61,3 +61,17 @@ test('deadline notice goes to the organizer only', () => {
   assert.deepEqual(messages.map((m) => m.to), ['1']);
   assert.match(messages[0].text, /1 из 3/);
 });
+
+test('reminder text uses a phrase of the stage matching days left', () => {
+  const game = drawnGame({ giftDate: '2026-12-27', phrases: { giftClose: [{ id: 1, text: 'СРОЧНО, {name}!', by: '2' }] } });
+  const random = Math.random;
+  Math.random = () => 0.999; // the last phrase in the pool = the game's own
+  try {
+    const close = reminderMessages(game, { kind: 'gift', daysLeft: 5 });
+    assert.match(close[0].text, /^СРОЧНО, Борис!/);
+    const soon = reminderMessages(game, { kind: 'gift', daysLeft: 10 });
+    assert.doesNotMatch(soon[0].text, /СРОЧНО/);
+  } finally {
+    Math.random = random;
+  }
+});
