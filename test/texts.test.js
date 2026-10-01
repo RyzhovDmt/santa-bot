@@ -113,3 +113,18 @@ test('honorifics are added to the first name now and then, per name from the gam
   assert.equal(nameFor(game, { name: 'Ирина Сергеевна' }, () => 0.9), 'Ирина');
   assert.equal(nameFor({}, { name: 'Сергей Лобозенков' }, () => 0), 'Сергей');
 });
+
+test('free chat matches short memes and uses reminder phrases of the current stage only', async () => {
+  const { chatReply } = await import('../src/texts.js');
+  const phrases = {
+    catchphrases: [{ id: 1, text: 'Деп? Додеп?' }, { id: 2, text: '67 🤙' }],
+    wish3: [{ id: 3, text: 'Саске, пожелание где?' }],
+    gift3: [{ id: 4, text: 'Саске, подарок где?' }],
+  };
+  const pick = (game, msg) => chatReply(game, { name: 'Сергей' }, msg, { random: () => 0 }).split('\n\n')[0];
+  const drawn = { title: 'x', status: 'drawn', phrases };
+  assert.equal(pick(drawn, 'деп'), 'Деп? Додеп?');
+  assert.equal(pick(drawn, '67'), '67 🤙');
+  assert.equal(pick(drawn, 'саске'), 'Саске, подарок где?');
+  assert.equal(pick({ ...drawn, status: 'open' }, 'саске'), 'Саске, пожелание где?');
+});

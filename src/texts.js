@@ -372,18 +372,25 @@ export function withCatchphrase(game, text, options) {
 const CHAT_PLACEHOLDERS = ['name', 'title'];
 // Event-bound phrases ("X joins", "gift bought", …) sound off in a chat; reminders' teasing and generic replies fit.
 const CHAT_KEYS = new Set(['chat', 'idle', 'catchphrases']);
-const CHAT_SOURCE = (key) => CHAT_KEYS.has(key) || PHRASES[key]?.stage || key === 'lastDay';
+// Reminder phrases only for the current stage of the game: wishes before the draw, gifts after it.
+function chatSource(game, key) {
+  if (CHAT_KEYS.has(key)) return true;
+  const group = key === 'lastDay' ? 'wish' : PHRASES[key]?.stage?.group;
+  if (group === 'wish') return game.status === 'open';
+  if (group === 'gift') return game.status === 'drawn';
+  return false;
+}
 const CHAT_MATCH_CHANCE = 0.8;
-const MIN_WORD = 4;
+const MIN_WORD = 3; // short memes count too: «деп», «67»
 // Frequent words that would match almost anything.
-const STOP_WORDS = new Set(['будет', 'будут', 'когда', 'можно', 'сегодня', 'привет', 'вообще', 'просто', 'очень', 'тоже', 'есть', 'если', 'чтобы', 'какой', 'какая', 'этот', 'только', 'меня', 'тебя']);
-// "сырки" -> "сырк": dropping the ending lets it match "сырков", "сырок"… (at least MIN_WORD letters kept).
-const stem = (word) => word.slice(0, Math.max(MIN_WORD, word.length - 2));
+const STOP_WORDS = new Set(['как', 'что', 'это', 'там', 'тут', 'кто', 'где', 'все', 'всё', 'еще', 'уже', 'так', 'вот', 'нет', 'нам', 'вам', 'его', 'она', 'они', 'мне', 'тебе', 'чем', 'для', 'или', 'без', 'про', 'над', 'под', 'при', 'будет', 'будут', 'когда', 'можно', 'сегодня', 'привет', 'вообще', 'просто', 'очень', 'тоже', 'есть', 'если', 'чтобы', 'какой', 'какая', 'этот', 'только', 'меня', 'тебя']);
+// "сырки" -> "сырк": dropping the ending lets it match "сырков", "сырок"…; words up to 4 letters stay whole.
+const stem = (word) => (word.length <= 4 ? word : word.slice(0, Math.max(4, word.length - 2)));
 
 function chatPool(game) {
   const pool = [];
   for (const [key, phrase] of Object.entries(PHRASES)) {
-    if (!CHAT_SOURCE(key)) continue;
+    if (!chatSource(game, key)) continue;
     for (const item of [...phrase.defaults.map((text) => ({ text })), ...customPhrases(game, key)]) {
       if (placeholdersIn(item.text).every((p) => CHAT_PLACEHOLDERS.includes(p))) pool.push(item);
     }
@@ -396,9 +403,10 @@ function stems(text) {
   const words = [];
   let word = '';
   for (const ch of `${text.toLowerCase()} `) {
-    if (ch.toLowerCase() !== ch.toUpperCase()) word += ch === 'ё' ? 'е' : ch;
+    if (ch.toLowerCase() !== ch.toUpperCase() || (ch >= '0' && ch <= '9')) word += ch === 'ё' ? 'е' : ch;
     else {
-      if (word.length >= MIN_WORD && !STOP_WORDS.has(word)) words.push(stem(word));
+      const isNumber = word.length >= 2 && [...word].every((c) => c >= '0' && c <= '9'); // «67»
+      if ((word.length >= MIN_WORD || isNumber) && !STOP_WORDS.has(word)) words.push(stem(word));
       word = '';
     }
   }
