@@ -241,7 +241,7 @@ async function applySetting(app, ctx, game, userId, field, raw) {
 // The receiver is made up, so no real pair or wish is revealed.
 const PREVIEW_RECEIVER = 'preview-receiver';
 
-async function sendPreview(app, game, userId) {
+export async function sendPreview(app, game, userId) {
   const me = { ...game.participants[userId], wishReady: false, giftBought: false };
   const fake = {
     ...game,

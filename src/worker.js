@@ -1,5 +1,6 @@
 import { webhookCallback } from 'grammy';
 import { COMMANDS, createApp } from './bot.js';
+import { sendPreview } from './handlers/game.js';
 import { runReminders } from './reminders.js';
 
 // Telegram waits for the webhook response; a draw for 40 players takes a few seconds.
@@ -33,6 +34,20 @@ export default {
       await setupWebhook(bot.api, `${url.origin}/webhook`, env);
       const info = await bot.api.getWebhookInfo();
       return Response.json({ ok: true, webhook: info.url, pending_updates: info.pending_update_count });
+    }
+
+    // Sample notifications to the game's organizer only (same as /preview in the bot).
+    if (url.pathname === '/preview') {
+      if (!env.WEBHOOK_SECRET || url.searchParams.get('secret') !== env.WEBHOOK_SECRET) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      const app = createApp(env);
+      const code = (url.searchParams.get('code') ?? '').toUpperCase();
+      await app.store.loadGames([code]);
+      const game = app.store.getGame(code);
+      if (!game) return new Response('Game not found', { status: 404 });
+      await sendPreview(app, game, game.ownerId);
+      return Response.json({ ok: true, sentTo: 'organizer' });
     }
 
     return new Response('Secret Santa bot is running', { status: 200 });
