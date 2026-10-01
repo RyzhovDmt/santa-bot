@@ -128,3 +128,9 @@ test('free chat matches short memes and uses reminder phrases of the current sta
   assert.equal(pick(drawn, 'саске'), 'Саске, подарок где?');
   assert.equal(pick({ ...drawn, status: 'open' }, 'саске'), 'Саске, пожелание где?');
 });
+
+test('a farewell closes the message after the catchphrase', () => {
+  const game = { phrases: { catchphrases: [{ id: 1, text: 'База' }], farewells: [{ id: 2, text: 'Аста ла виста' }] } };
+  assert.equal(withCatchphrase(game, 'Текст', () => 0), 'Текст\n\n💬 База\n\n👋 Аста ла виста');
+  assert.equal(withCatchphrase(game, 'Текст', () => 0.99), 'Текст');
+});

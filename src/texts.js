@@ -101,14 +101,15 @@ export const PHRASE_GROUPS = {
   wish: { label: '✍️ Напоминания о пожелании', hint: 'Чем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:' },
   gift: { label: '🛍 Напоминания о подарке', hint: 'Чем больше напоминаний участник уже получил, тем настойчивее тон. Выбери ступень:' },
   replies: { label: '📌 Ответы бота', hint: 'Бот отвечает этими фразами на действия участников: сохранил пожелание, купил подарок, отправил сообщение, написал что-то непонятное…' },
-  flavor: { label: '🗣 Обращения, междометия, фразочки', hint: 'Бот случайно добавляет их в любое уведомление: обращение и междометие — в начало («Ну чё, братан! …»), фразочку — в конец. Пока списки пустые — ничего не добавляется.' },
+  flavor: { label: '🗣 Обращения, междометия, фразочки, прощания', hint: 'Бот случайно добавляет их в любое сообщение: обращение и междометие — в начало («Ну чё, братан! …»), фразочку и прощание — в конец. Пока списки пустые — ничего не добавляется.' },
 };
 
 // Flavor lists: short words prepended to notifications and catchphrases appended, at random.
-const FLAVOR_MAX_LENGTH = { interjections: 40, addresses: 40, catchphrases: 150 };
+const FLAVOR_MAX_LENGTH = { interjections: 40, addresses: 40, catchphrases: 150, farewells: 150 };
 const INTERJECTION_CHANCE = 0.6;
 const ADDRESS_CHANCE = 0.75;
 const CATCHPHRASE_CHANCE = 0.5;
+const FAREWELL_CHANCE = 0.33;
 
 export const PHRASES = {
   join: {
@@ -227,6 +228,15 @@ export const PHRASES = {
     menuGroup: 'flavor',
     flavor: true,
     example: 'Ну это база',
+    placeholders: [],
+    defaults: [],
+  },
+  farewells: {
+    label: '👋 Прощания',
+    hint: 'в самом конце сообщения, примерно в трети случаев',
+    menuGroup: 'flavor',
+    flavor: true,
+    example: 'Аста ла виста, бейби',
     placeholders: [],
     defaults: [],
   },
@@ -361,17 +371,19 @@ export function pickPhrase(game, key, vars, options) {
   return decorate(game, renderPhrase(weightedPick(pool, opts.soft, opts.random).text, vars), opts);
 }
 
-// Appends a random catchphrase to a whole notification (sometimes, if the game has any).
+// Appends a random catchphrase and/or a farewell to a whole message (sometimes, if the game has any).
 export function withCatchphrase(game, text, options) {
-  const phrase = pickFlavor(game, 'catchphrases', CATCHPHRASE_CHANCE, pickOptions(options));
-  return phrase ? `${text}\n\n💬 ${phrase}` : text;
+  const opts = pickOptions(options);
+  const phrase = pickFlavor(game, 'catchphrases', CATCHPHRASE_CHANCE, opts);
+  const farewell = pickFlavor(game, 'farewells', FAREWELL_CHANCE, opts);
+  return [text, phrase && `💬 ${phrase}`, farewell && `👋 ${farewell}`].filter(Boolean).join('\n\n');
 }
 
 // Free chat with the bot: answer with a phrase from the whole collection that can be rendered
 // without game context ({name}/{title} only). A phrase sharing a word with the message is preferred.
 const CHAT_PLACEHOLDERS = ['name', 'title'];
 // Event-bound phrases ("X joins", "gift bought", …) sound off in a chat; reminders' teasing and generic replies fit.
-const CHAT_KEYS = new Set(['chat', 'idle', 'catchphrases']);
+const CHAT_KEYS = new Set(['chat', 'idle', 'catchphrases']); // farewells only close a message
 // Reminder phrases only for the current stage of the game: wishes before the draw, gifts after it.
 function chatSource(game, key) {
   if (CHAT_KEYS.has(key)) return true;
