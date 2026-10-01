@@ -26,6 +26,17 @@ export function dueReminders(game, today) {
   return due;
 }
 
+// A long wish is cut in daily reminders; the full text is one button away («Кому я дарю» view).
+const WISH_PREVIEW = 300;
+const wishOf = (game, giverId) => game.participants[game.pairs[giverId]].wish ?? '';
+
+function previewWish(wish) {
+  if (wish.length <= WISH_PREVIEW) return wish;
+  const cut = wish.slice(0, WISH_PREVIEW);
+  const end = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf('\n'));
+  return `${(end > WISH_PREVIEW / 2 ? cut.slice(0, end) : cut).trimEnd()}…`;
+}
+
 // Number of the reminder this participant is about to get (1 for the first one).
 const reminderNumber = (game, kind, userId) => (game.reminderCounts?.[kind]?.[userId] ?? 0) + 1;
 
@@ -75,9 +86,12 @@ export function reminderMessages(game, reminder) {
       `До вручения подарков в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${date}).`,
       `Ты даришь: ${game.participants[game.pairs[to]].name}`,
       ...(game.budget ? [`💰 Бюджет: ${game.budget}`] : []),
-      ...(game.participants[game.pairs[to]].wish ? ['', `Пожелание:\n${game.participants[game.pairs[to]].wish}`] : []),
+      ...(wishOf(game, to) ? ['', `Пожелание:\n${previewWish(wishOf(game, to))}`] : []),
     ].join('\n'), toneFor(game, p)),
-    extra: inline([[button('🛍 Подарок куплен', 'gift.bought', c), button('🎁 Кому я дарю', 'whom.view', c)]]),
+    extra: inline([[
+      button('🛍 Подарок куплен', 'gift.bought', c),
+      wishOf(game, to).length > WISH_PREVIEW ? button('📜 Пожелание целиком', 'whom.view', c) : button('🎁 Кому я дарю', 'whom.view', c),
+    ]]),
   }));
 }
 

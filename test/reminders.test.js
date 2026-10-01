@@ -94,3 +94,13 @@ test('gift reminder includes the receiver wish', () => {
   const [toAnya] = reminderMessages(drawnGame({ giftDate: '2026-12-27' }), { kind: 'gift', daysLeft: 5 }).filter((m) => m.to === '3');
   assert.match(toAnya.text, /Ты даришь: Аня[\s\S]*Пожелание:\nкнига/);
 });
+
+test('a long wish is cut in the gift reminder with a button for the full text', () => {
+  const game = drawnGame({ giftDate: '2026-12-27' });
+  game.participants[1].wish = `${'настолка '.repeat(60)}конец`;
+  const [toAnya] = reminderMessages(game, { kind: 'gift', daysLeft: 5 }).filter((m) => m.to === '3');
+  assert.ok(toAnya.text.includes('…'));
+  assert.ok(!toAnya.text.includes('конец'));
+  const labels = toAnya.extra.reply_markup.inline_keyboard.flat().map((b) => b.text);
+  assert.ok(labels.includes('📜 Пожелание целиком'));
+});
