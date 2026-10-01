@@ -75,6 +75,7 @@ export function reminderMessages(game, reminder) {
       `До вручения подарков в игре «${game.title}» — ${daysText(reminder.daysLeft)} (${date}).`,
       `Ты даришь: ${game.participants[game.pairs[to]].name}`,
       ...(game.budget ? [`💰 Бюджет: ${game.budget}`] : []),
+      ...(game.participants[game.pairs[to]].wish ? ['', `Пожелание:\n${game.participants[game.pairs[to]].wish}`] : []),
     ].join('\n'), toneFor(game, p)),
     extra: inline([[button('🛍 Подарок куплен', 'gift.bought', c), button('🎁 Кому я дарю', 'whom.view', c)]]),
   }));

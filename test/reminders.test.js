@@ -89,3 +89,8 @@ test('last day of the deadline overrides the stage', () => {
     Math.random = random;
   }
 });
+
+test('gift reminder includes the receiver wish', () => {
+  const [toAnya] = reminderMessages(drawnGame({ giftDate: '2026-12-27' }), { kind: 'gift', daysLeft: 5 }).filter((m) => m.to === '3');
+  assert.match(toAnya.text, /Ты даришь: Аня[\s\S]*Пожелание:\nкнига/);
+});
