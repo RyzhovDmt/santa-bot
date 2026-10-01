@@ -1,5 +1,6 @@
 import { daysBetween, formatDate, parseDate } from '../dates.js';
 import { cycles, draw, santaOf } from '../draw.js';
+import { reminderMessages } from '../reminders.js';
 import {
   BTN, HELP, STATUS_TITLE, button, cancelKeyboard, displayName, gameDetails, giftDetails, inline, mainMenu,
 } from '../ui.js';
@@ -236,6 +237,30 @@ async function applySetting(app, ctx, game, userId, field, raw) {
   return ctx.reply(`Сохранено ✅\n\n${gameDetails(game)}`, infoKeyboard(game, userId));
 }
 
+// Organizer-only: sample notifications with this game's phrases, sent to the organizer alone.
+// The receiver is made up, so no real pair or wish is revealed.
+const PREVIEW_RECEIVER = 'preview-receiver';
+
+async function sendPreview(app, game, userId) {
+  const me = { ...game.participants[userId], wishReady: false, giftBought: false };
+  const fake = {
+    ...game,
+    participants: { [userId]: me, [PREVIEW_RECEIVER]: { name: 'Тестовый Получатель', wish: 'Настолка «Колонизаторы» (шутка) и сырки-картошка', wishReady: true, giftBought: true } },
+    pairs: { [userId]: PREVIEW_RECEIVER },
+    reminderCounts: { wish: { [userId]: Math.floor(Math.random() * 7) }, gift: { [userId]: Math.floor(Math.random() * 7) } },
+    wishDeadline: game.wishDeadline ?? app.today(),
+    giftDate: game.giftDate ?? app.today(),
+  };
+  const label = '🧪 Тестовое уведомление — видишь только ты';
+  const mine = (messages) => messages.filter((m) => m.to === userId);
+  const messages = [
+    { to: userId, text: `${label}: жеребьёвка\n\n${drawMessage(fake, userId, PREVIEW_RECEIVER)}` },
+    ...mine(reminderMessages({ ...fake, status: 'open' }, { kind: 'wish', daysLeft: 4 })).map((m) => ({ ...m, text: `${label}: пожелание\n\n${m.text}` })),
+    ...mine(reminderMessages({ ...fake, status: 'drawn' }, { kind: 'gift', daysLeft: 10 })).map((m) => ({ ...m, text: `${label}: подарок\n\n${m.text}`, extra: undefined })),
+  ];
+  await app.broadcast(messages);
+}
+
 function drawMessage(game, giverId, receiverId) {
   const receiver = game.participants[receiverId];
   const details = giftDetails(game);
@@ -402,6 +427,7 @@ export function register(app) {
   }
 
   bot.command('draw', (ctx) => ownGame(app, ctx, (game) => runDraw(app, ctx, game)));
+  bot.command('preview', (ctx) => ownGame(app, ctx, (game, userId) => sendPreview(app, game, userId)));
   app.onAction('draw', ownerOnly((ctx, game) => runDraw(app, ctx, game)));
 
   bot.command('reveal', (ctx) => ownGame(app, ctx, (game) => askReveal(app, ctx, game)));

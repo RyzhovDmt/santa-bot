@@ -345,3 +345,17 @@ test('phrase lists are stored apart from the game document', async () => {
   await press('A', `cancel.yes:${code}`);
   assert.equal(env.DB.db.prepare('SELECT count(*) AS n FROM game_phrases').get().n, 0);
 });
+
+test('organizer preview sends sample notifications only to the organizer, with a made-up receiver', async () => {
+  const code = await setupGame();
+  await press('A', `draw:${code}`);
+  sent = [];
+  const out = await say('A', '/preview');
+  assert.equal(out.length, 3);
+  assert.ok(out.every((m) => m.to === NAME_TO_ID.A));
+  assert.ok(out.every((m) => m.text.startsWith('🧪 Тестовое уведомление')));
+  assert.ok(out.some((m) => m.text.includes('Тестовый Получатель')));
+  const realReceiver = loadGame().pairs[NAME_TO_ID.A];
+  assert.ok(out.every((m) => !m.text.includes(`Ты даришь: ${ID_TO_NAME[realReceiver]}`)));
+  assert.match((await say('B', '/preview'))[0].text, /только организатор/);
+});

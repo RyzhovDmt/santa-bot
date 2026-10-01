@@ -26,7 +26,7 @@ export const HELP = [
   '4. С получателем и своим Сантой можно переписываться анонимно.',
   '',
   'Всё управление — кнопками внизу.',
-  'Команды: /menu /new /status /info /wish /whom /draw /reveal /leave /cancel',
+  'Команды: /menu /new /status /info /wish /whom /draw /reveal /leave /cancel /preview',
 ].join('\n');
 
 // Keyboards are plain Bot API objects, passed as the "other" argument of reply/sendMessage.
