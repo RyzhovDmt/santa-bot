@@ -4,7 +4,7 @@ import {
   BTN, HELP, STATUS_TITLE, button, cancelKeyboard, displayName, gameDetails, giftDetails, inline, mainMenu,
 } from '../ui.js';
 import {
-  flavored, isSoft, pickPhrase, shortName, toneFor, withCatchphrase,
+  flavored, isSoft, nameFor, pickPhrase, toneFor, withCatchphrase,
 } from '../texts.js';
 
 const MIN_PLAYERS = 3;
@@ -147,7 +147,7 @@ async function joinGame(app, ctx, code) {
   store.setMode(userId, null);
   await store.save();
   const tone = toneFor(game, participant);
-  const greeting = pickPhrase(game, 'join', { name: shortName(participant), title: game.title }, tone);
+  const greeting = pickPhrase(game, 'join', { name: nameFor(game, participant), title: game.title }, tone);
   return ctx.reply(
     withCatchphrase(game, `${greeting}\n\n${gameDetails(game)}\n\nНапиши своё пожелание к подарку одним сообщением — его увидит только твой Тайный Санта.`, tone),
     mainMenu(game),
@@ -241,7 +241,7 @@ function drawMessage(game, giverId, receiverId) {
   const details = giftDetails(game);
   const tone = toneFor(game, game.participants[giverId]);
   return withCatchphrase(game, [
-    pickPhrase(game, 'draw', { name: shortName(game.participants[giverId]), title: game.title, receiver: receiver.name }, tone),
+    pickPhrase(game, 'draw', { name: nameFor(game, game.participants[giverId]), title: game.title, receiver: receiver.name }, tone),
     '',
     `Игра «${game.title}»`,
     '',
@@ -308,7 +308,7 @@ async function reveal(app, ctx, game) {
   await app.broadcast(Object.keys(game.participants).map((to) => ({
     to,
     text: withCatchphrase(game, [
-      pickPhrase(game, 'reveal', { name: shortName(game.participants[to]), title: game.title, santa: name(santaOf(game.pairs, to)) }, toneFor(game, game.participants[to])),
+      pickPhrase(game, 'reveal', { name: nameFor(game, game.participants[to]), title: game.title, santa: name(santaOf(game.pairs, to)) }, toneFor(game, game.participants[to])),
       '',
       `Тебе дарит: ${name(santaOf(game.pairs, to))}`,
       '',

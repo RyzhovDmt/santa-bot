@@ -407,7 +407,7 @@ function stems(text) {
 
 export function chatReply(game, participant, message, options) {
   const opts = pickOptions(options);
-  const vars = { name: shortName(participant), title: game.title };
+  const vars = { name: nameFor(game, participant, opts.random), title: game.title };
   const words = stems(message);
   const normalize = (text) => text.toLowerCase().replaceAll('ё', 'е');
   const matches = words.length ? chatPool(game).filter((item) => words.some((w) => normalize(item.text).includes(w))) : [];
@@ -419,6 +419,26 @@ export function chatReply(game, participant, message, options) {
 
 // Name without "(@username)" reads better inside a sentence.
 export const shortName = (participant) => participant.name.split(' (@')[0];
+
+// Anime-style honorifics sometimes added to {name}: "Сергей-кун". The game sets them per first name
+// (game.honorifics = { "default": ["кун"], "Ира": ["тян"] }); without that setting names stay as they are.
+const HONORIFIC_CHANCE = 0.25;
+
+function honorificsFor(game, participant) {
+  const table = game.honorifics;
+  if (!table) return [];
+  const first = shortName(participant).split(' ')[0].toLowerCase();
+  const own = Object.entries(table).find(([name]) => name !== 'default' && name.toLowerCase() === first);
+  return own ? own[1] : table.default ?? [];
+}
+
+// Value for {name}: the first name (as people call each other), now and then with an honorific.
+export function nameFor(game, participant, random = Math.random) {
+  const first = shortName(participant).split(' ')[0];
+  const list = honorificsFor(game, participant);
+  if (!list.length || random() >= HONORIFIC_CHANCE) return first;
+  return `${first}-${list[Math.floor(random() * list.length)]}`;
+}
 
 // Soft mode: set by the organizer per participant, or by first name from game.softNames (e.g. from a phrase pack).
 export function isSoft(game, participant) {
@@ -435,6 +455,6 @@ export const toneFor = (game, participant) => ({ soft: isSoft(game, participant)
 export function flavored(game, key, participant, text, vars = {}) {
   if (!game || !participant) return text;
   const tone = toneFor(game, participant);
-  const phrase = pickPhrase(game, key, { name: shortName(participant), title: game.title, ...vars }, tone);
+  const phrase = pickPhrase(game, key, { name: nameFor(game, participant), title: game.title, ...vars }, tone);
   return withCatchphrase(game, `${phrase}\n\n${text}`, tone);
 }

@@ -104,3 +104,12 @@ test('soft participants get harsh phrases much less often; soft mode from softNa
   assert.equal(isSoft(game, { name: 'Ирина', soft: false }), false);
   assert.equal(isSoft(game, { name: 'Сергей', soft: true }), true);
 });
+
+test('honorifics are added to the first name now and then, per name from the game settings', async () => {
+  const { nameFor } = await import('../src/texts.js');
+  const game = { honorifics: { default: ['кун'], 'Ира': ['тян'], 'Ирина': ['тян'] } };
+  assert.equal(nameFor(game, { name: 'Сергей Лобозенков (@Slonad)' }, () => 0), 'Сергей-кун');
+  assert.equal(nameFor(game, { name: 'Ирина Сергеевна (@IrinaNowS)' }, () => 0), 'Ирина-тян');
+  assert.equal(nameFor(game, { name: 'Ирина Сергеевна' }, () => 0.9), 'Ирина');
+  assert.equal(nameFor({}, { name: 'Сергей Лобозенков' }, () => 0), 'Сергей');
+});

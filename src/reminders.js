@@ -1,6 +1,6 @@
 import { daysBetween, formatDate, hourIn, todayIn } from './dates.js';
 import { loadActiveGames, markReminder } from './storage.js';
-import { pickPhrase, shortName, stageKey, toneFor, withCatchphrase } from './texts.js';
+import { nameFor, pickPhrase, stageKey, toneFor, withCatchphrase } from './texts.js';
 import { button, daysText, inline } from './ui.js';
 
 const WISH_EVERY_DAYS = 1;
@@ -43,7 +43,7 @@ export function reminderMessages(game, reminder) {
       to,
       text: withCatchphrase(game, [
         pickPhrase(game, lastDay ? 'lastDay' : stageKey('wish', reminderNumber(game, 'wish', to)), {
-          name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date, count: reminderNumber(game, 'wish', to),
+          name: nameFor(game, p), title: game.title, days: daysText(reminder.daysLeft), date, count: reminderNumber(game, 'wish', to),
         }, toneFor(game, p)),
         '',
         info,
@@ -68,7 +68,7 @@ export function reminderMessages(game, reminder) {
     to,
     text: withCatchphrase(game, [
       pickPhrase(game, stageKey('gift', reminderNumber(game, 'gift', to)), {
-        name: shortName(p), title: game.title, days: daysText(reminder.daysLeft), date,
+        name: nameFor(game, p), title: game.title, days: daysText(reminder.daysLeft), date,
         receiver: game.participants[game.pairs[to]].name, count: reminderNumber(game, 'gift', to),
       }, toneFor(game, p)),
       '',

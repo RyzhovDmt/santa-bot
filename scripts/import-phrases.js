@@ -54,6 +54,10 @@ if (packFile.softNames) {
   game.softNames = packFile.softNames;
   report.push(`✔ softNames: ${packFile.softNames.join(', ')}`);
 }
+if (packFile.honorifics) {
+  game.honorifics = packFile.honorifics;
+  report.push(`✔ honorifics: ${Object.entries(packFile.honorifics).map(([n, l]) => `${n}: ${l.join('/')}`).join('; ')}`);
+}
 
 for (const [key, texts] of Object.entries(pack)) {
   if (!PHRASES[key]) {
@@ -89,7 +93,7 @@ if (dryRun) {
 const sqlFile = join(tmpdir(), `santa-import-${code}.sql`);
 const quote = (value) => `'${JSON.stringify(value).replaceAll("'", "''")}'`;
 const statements = [
-  `UPDATE games SET data = json_set(data, '$.nextPhraseId', ${game.nextPhraseId ?? 0}${game.softNames ? `, '$.softNames', json(${quote(game.softNames)})` : ''}), updated_at = '${new Date().toISOString()}' WHERE code = '${sqlCode}';`,
+  `UPDATE games SET data = json_set(data, '$.nextPhraseId', ${game.nextPhraseId ?? 0}${game.softNames ? `, '$.softNames', json(${quote(game.softNames)})` : ''}${game.honorifics ? `, '$.honorifics', json(${quote(game.honorifics)})` : ''}), updated_at = '${new Date().toISOString()}' WHERE code = '${sqlCode}';`,
   ...Object.entries(game.phrases).map(([key, list]) => `INSERT INTO game_phrases (code, key, data) VALUES ('${sqlCode}', '${key}', ${quote(list)}) ON CONFLICT (code, key) DO UPDATE SET data = excluded.data;`),
 ];
 writeFileSync(sqlFile, `${statements.join('\n')}\n`);
